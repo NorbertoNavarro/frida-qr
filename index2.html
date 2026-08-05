@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Selfie con Frida — The Chronos Experience</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F1E4; --paper-2:#EFE8D6; --ink:#2B2118;
+    --accent:#A23324; --accent-ink:#5A1B12;
+    --verde:#3E5C3A; --verde-ink:#233420;
+    --rojo:#A23324; --rojo-ink:#5A1B12;
+    --mostaza:#D99A2B; --mostaza-ink:#7A5312;
+    --line: rgba(43,33,24,0.16);
+    --line-onvideo: rgba(246,241,228,0.35);
+  }
+  *{box-sizing:border-box;}
+  html,body{ margin:0; height:100%; background:#000; overflow:hidden; font-family:'Inter',sans-serif; -webkit-tap-highlight-color:transparent; }
+
+  #stage{ position:fixed; inset:0; }
+  #cam{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; transform:scaleX(-1);
+  }
+  #three-wrap{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  #three-wrap canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
+
+  /* ---------- shared "paper card" chrome, echoes the passport pages ---------- */
+  .paper-chip{
+    background:rgba(246,241,228,0.92); color:var(--ink);
+    border:1px solid rgba(43,33,24,0.1);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    box-shadow:0 6px 24px rgba(0,0,0,.18);
+  }
+  .eyebrow{
+    font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; opacity:.62;
+    margin:0; border-left:2px solid var(--accent); padding-left:8px;
+  }
+
+  #top-bar{
+    position:absolute; top:0; left:0; right:0; padding:16px 16px 0;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+  }
+  #title-chip{ border-radius:16px; padding:10px 16px 12px; max-width:76%; }
+  #title-chip h1{ font-family:'Fraunces',serif; font-weight:500; font-size:16.5px; margin:3px 0 0; line-height:1.25; }
+
+  #mode-chip{
+    border-radius:999px; padding:8px 13px; font-size:11px; font-weight:600;
+    display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer;
+  }
+  #mode-chip .dot{ width:7px; height:7px; border-radius:50%; background:var(--verde); }
+  #mode-chip.manual .dot{ background:var(--mostaza); }
+
+  #status{
+    position:absolute; left:16px; right:16px; top:50%; transform:translateY(-50%);
+    border-radius:18px; padding:26px 22px; text-align:center;
+  }
+  #status .eyebrow{ display:inline-block; margin-bottom:10px; }
+  #status h2{ font-family:'Fraunces',serif; font-weight:500; font-size:20px; margin:0 0 10px; }
+  #status p{ font-size:13.5px; line-height:1.65; opacity:.82; margin:0; }
+  #status button{
+    margin-top:18px; background:var(--verde); color:var(--paper); border:none; border-radius:999px;
+    padding:13px 26px; font-size:13.5px; font-weight:600; font-family:inherit; letter-spacing:.02em;
+    cursor:pointer;
+  }
+
+  #model-loading{
+    position:absolute; left:0; right:0; top:calc(50% + 96px); display:flex; justify-content:center;
+  }
+  #model-loading .paper-chip{ border-radius:999px; padding:8px 16px; font-size:11.5px; }
+
+  #controls{
+    position:absolute; left:0; right:0; bottom:0; padding:14px 16px 24px;
+    display:flex; flex-direction:column; gap:12px; align-items:center;
+  }
+  .hint-chip{
+    border-radius:999px; padding:7px 14px; font-size:11px; text-align:center;
+    display:flex; align-items:center; gap:6px;
+  }
+  .row{ display:flex; gap:10px; }
+  .ctrl-btn{
+    width:42px; height:42px; border-radius:50%; border:1px solid rgba(43,33,24,0.12);
+    background:rgba(246,241,228,0.85); color:var(--ink); font-size:16px; display:flex;
+    align-items:center; justify-content:center; backdrop-filter:blur(8px); cursor:pointer;
+  }
+  .ctrl-btn:active{ transform:scale(0.92); }
+  #shutter{
+    width:68px; height:68px; border-radius:50%; border:3px solid var(--verde);
+    background:rgba(246,241,228,0.25); backdrop-filter:blur(6px); cursor:pointer;
+  }
+  #shutter::after{
+    content:''; display:block; width:54px; height:54px; margin:4px; border-radius:50%; background:var(--paper);
+  }
+  #shutter:active{ transform:scale(0.95); }
+  #shutter-row{ display:flex; align-items:center; gap:22px; }
+
+  #flash{ position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; }
+
+  #result{
+    position:fixed; inset:0; background:var(--paper); display:none; flex-direction:column;
+    align-items:center; justify-content:center; z-index:20; padding:24px;
+  }
+  #result .eyebrow{ margin-bottom:14px; }
+  #result h2{ font-family:'Fraunces',serif; font-weight:500; font-size:21px; margin:0 0 16px; color:var(--ink); }
+  #result img{ max-width:100%; max-height:60vh; border-radius:12px; box-shadow:0 14px 44px rgba(43,33,24,.28); border:1px solid var(--line); }
+  #result .row{ margin-top:20px; }
+  #result button{
+    border:none; border-radius:999px; padding:13px 24px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer;
+  }
+  #dl{ background:var(--verde); color:var(--paper); }
+  #close-result{ background:transparent; color:var(--ink); border:1px solid var(--line)!important; }
+
+  #credit{
+    position:absolute; right:10px; bottom:8px; border-radius:999px; padding:5px 11px;
+    font-size:9px; opacity:.9; max-width:65%; text-align:right; line-height:1.4;
+  }
+
+  .hidden{ display:none!important; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <video id="cam" autoplay playsinline muted></video>
+  <div id="three-wrap"></div>
+</div>
+
+<div id="top-bar">
+  <div id="title-chip" class="paper-chip">
+    <p class="eyebrow">The Chronos Experience</p>
+    <h1>Selfie con Frida</h1>
+  </div>
+  <div id="mode-chip" class="paper-chip hidden"><span class="dot"></span><span id="mode-label">Sigue tu movimiento</span></div>
+</div>
+
+<div id="status" class="paper-chip">
+  <p class="eyebrow">Sala Frida Kahlo</p>
+  <h2>Tómate una foto junto a Frida</h2>
+  <p>Este filtro usa tu cámara para colocar un modelo 3D de Frida a tu lado, y la sigue mientras te mueves — como un filtro de realidad aumentada. Necesita permiso de cámara.</p>
+  <button id="start-btn">Activar cámara</button>
+</div>
+
+<div id="model-loading" class="hidden"><div class="paper-chip">Cargando a Frida…</div></div>
+
+<div id="controls" class="hidden">
+  <div class="hint-chip paper-chip" id="hint">Arrastra la pantalla o usa los botones para ajustar a Frida</div>
+  <div class="row">
+    <div class="ctrl-btn" id="left" title="Mover a la izquierda">←</div>
+    <div class="ctrl-btn" id="smaller" title="Achicar">−</div>
+    <div class="ctrl-btn" id="bigger" title="Agrandar">+</div>
+    <div class="ctrl-btn" id="right" title="Mover a la derecha">→</div>
+  </div>
+  <div id="shutter-row">
+    <div style="width:42px"></div>
+    <div id="shutter"></div>
+    <div style="width:42px"></div>
+  </div>
+</div>
+
+<div id="flash"></div>
+
+<div id="result">
+  <p class="eyebrow">Sala Frida Kahlo</p>
+  <h2>Tu recuerdo con Frida</h2>
+  <img id="result-img" alt="Selfie con Frida">
+  <div class="row">
+    <button id="close-result">Cerrar</button>
+    <button id="dl">Descargar</button>
+  </div>
+</div>
+
+<div id="credit" class="paper-chip">Modelo 3D "Frida Crying" por queenawzq (Sketchfab) · CC-BY-4.0</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<!-- Rastreo de rostro para el seguimiento tipo filtro AR -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const video = document.getElementById('cam');
+const wrap = document.getElementById('three-wrap');
+const statusEl = document.getElementById('status');
+const controlsEl = document.getElementById('controls');
+const loadingEl = document.getElementById('model-loading');
+const startBtn = document.getElementById('start-btn');
+const shutter = document.getElementById('shutter');
+const flash = document.getElementById('flash');
+const resultEl = document.getElementById('result');
+const resultImg = document.getElementById('result-img');
+const modeChip = document.getElementById('mode-chip');
+const modeLabel = document.getElementById('mode-label');
+const hint = document.getElementById('hint');
+
+// ---------- three.js scene (fondo transparente sobre el video) ----------
+const scene = new THREE.Scene();
+const camera3 = new THREE.PerspectiveCamera(42, wrap.clientWidth / wrap.clientHeight, 0.01, 40);
+camera3.position.set(0, 1.05, 2.6);
+camera3.lookAt(0, 0.95, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+renderer.setClearColor(0x000000, 0);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+wrap.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0xfff2df, 1.15));
+const key = new THREE.DirectionalLight(0xffffff, 1.3);
+key.position.set(1.2, 3, 2.2);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xdfeaff, 0.5);
+fill.position.set(-2, 1, 1.5);
+scene.add(fill);
+const rim = new THREE.DirectionalLight(0xffe8c9, 0.4);
+rim.position.set(0, 2, -2);
+scene.add(rim);
+
+// ---------- cargar el modelo real ----------
+const fridaGroup = new THREE.Group();
+let baseScale = 1;
+let loadedModel = null;
+let modelLoaded = false;
+let modelLoadFailed = false;
+let mixer = null;
+const clock = new THREE.Clock();
+
+const loader = new GLTFLoader();
+loader.load('./scene.gltf', (gltf)=>{
+  const model = gltf.scene;
+
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  const targetHeight = 1.7;
+  const scaleFactor = targetHeight / (size.y || 1);
+  model.scale.setScalar(scaleFactor);
+
+  const box2 = new THREE.Box3().setFromObject(model);
+  model.position.x -= (box2.min.x + box2.max.x) / 2;
+  model.position.z -= (box2.min.z + box2.max.z) / 2;
+  model.position.y -= box2.min.y;
+
+  if(gltf.animations && gltf.animations.length){
+    mixer = new THREE.AnimationMixer(model);
+    const action = mixer.clipAction(gltf.animations[0]);
+    action.play();
+  }
+
+  loadedModel = model;
+  fridaGroup.add(model);
+  modelLoaded = true;
+  loadingEl.classList.add('hidden');
+},
+undefined,
+(err)=>{
+  console.error('Error cargando el modelo:', err);
+  modelLoadFailed = true;
+  loadingEl.querySelector('.paper-chip').textContent = 'No se pudo cargar el modelo 3D.';
+});
+
+fridaGroup.position.set(0.55, -0.85, 0);
+scene.add(fridaGroup);
+
+const shadowGeo = new THREE.CircleGeometry(0.4, 24);
+const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 });
+const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+shadow.rotation.x = -Math.PI/2;
+shadow.position.set(0, 0.005, 0);
+fridaGroup.add(shadow);
+
+// ================= LLUVIA DE PÉTALOS DE ROSA =================
+function makePetalTexture(){
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.translate(32,32);
+  const grad = ctx.createLinearGradient(0,-28,0,28);
+  grad.addColorStop(0, '#F7DCD3');
+  grad.addColorStop(0.45, '#E38C82');
+  grad.addColorStop(1, '#A23324');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(0,-27);
+  ctx.bezierCurveTo(19,-21, 21,6, 0,27);
+  ctx.bezierCurveTo(-21,6, -19,-21, 0,-27);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-in';
+  const fade = ctx.createRadialGradient(0,0,4,0,0,30);
+  fade.addColorStop(0,'rgba(0,0,0,1)');
+  fade.addColorStop(1,'rgba(0,0,0,0.75)');
+  ctx.fillStyle = fade;
+  ctx.beginPath(); ctx.arc(0,0,30,0,Math.PI*2); ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+const petalTexture = makePetalTexture();
+
+function visibleWidthAtZ(z){
+  const dist = camera3.position.z - z;
+  const vFOV = camera3.fov * Math.PI/180;
+  const h = 2*Math.tan(vFOV/2)*dist;
+  return h*camera3.aspect;
+}
+
+const PETAL_COUNT = 26;
+const petals = [];
+const petalGroup = new THREE.Group();
+scene.add(petalGroup);
+
+function spawnPetal(p, fresh){
+  const z = THREE.MathUtils.randFloat(-0.6, 1.9);
+  const halfW = visibleWidthAtZ(z) / 2;
+  p.z = z;
+  p.x = THREE.MathUtils.randFloat(-halfW, halfW);
+  p.y = fresh ? THREE.MathUtils.randFloat(0.6, 2.4) : 2.4 + Math.random()*0.6;
+  p.vy = THREE.MathUtils.randFloat(0.11, 0.26);
+  p.swayAmp = THREE.MathUtils.randFloat(0.08, 0.22);
+  p.swaySpeed = THREE.MathUtils.randFloat(0.5, 1.1);
+  p.swayPhase = Math.random()*Math.PI*2;
+  p.spin = THREE.MathUtils.randFloat(-0.6, 0.6);
+  p.baseX = p.x;
+}
+
+for(let i=0;i<PETAL_COUNT;i++){
+  const mat = new THREE.SpriteMaterial({ map: petalTexture, transparent:true, depthWrite:false, opacity:0.92 });
+  const sprite = new THREE.Sprite(mat);
+  const s = THREE.MathUtils.randFloat(0.07, 0.15);
+  sprite.scale.set(s, s, 1);
+  const p = { sprite, x:0, y:0, z:0, vy:0, swayAmp:0, swaySpeed:0, swayPhase:0, spin:0, baseX:0, rot:Math.random()*Math.PI*2 };
+  spawnPetal(p, true);
+  sprite.position.set(p.x, p.y, p.z);
+  sprite.material.rotation = p.rot;
+  petalGroup.add(sprite);
+  petals.push(p);
+}
+
+function updatePetals(dt, t){
+  for(const p of petals){
+    p.y -= p.vy * dt;
+    p.rot += p.spin * dt;
+    const sway = Math.sin(t*p.swaySpeed + p.swayPhase) * p.swayAmp;
+    p.sprite.position.set(p.baseX + sway, p.y, p.z);
+    p.sprite.material.rotation = p.rot;
+    if(p.y < -1.4){
+      spawnPetal(p, false);
+      p.sprite.position.set(p.x, p.y, p.z);
+    }
+  }
+}
+
+// ---------- interacción manual: arrastrar / botones ----------
+let dragging = false, lastX = 0, lastY = 0;
+function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+function goManual(){
+  if(autoFollow){
+    autoFollow = false;
+    updateModeChip();
+  }
+}
+
+wrap.addEventListener('pointerdown', (e)=>{
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  if(wrap.setPointerCapture) { try{ wrap.setPointerCapture(e.pointerId); }catch(err){} }
+});
+function endDrag(){ dragging = false; }
+wrap.addEventListener('pointerup', endDrag);
+wrap.addEventListener('pointercancel', endDrag);
+window.addEventListener('pointerup', endDrag);
+function onDragMove(e){
+  if(!dragging) return;
+  const dx = e.clientX - lastX;
+  const dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  if(Math.abs(dx) > 2 || Math.abs(dy) > 2) goManual();
+  fridaGroup.position.x = clamp(fridaGroup.position.x + dx * 0.004, -1.6, 1.6);
+  fridaGroup.position.y = clamp(fridaGroup.position.y - dy * 0.003, -1.3, -0.2);
+}
+wrap.addEventListener('pointermove', onDragMove);
+window.addEventListener('pointermove', onDragMove);
+
+document.getElementById('left').addEventListener('click', ()=>{ goManual(); fridaGroup.position.x = clamp(fridaGroup.position.x - 0.15, -1.6, 1.6); });
+document.getElementById('right').addEventListener('click', ()=>{ goManual(); fridaGroup.position.x = clamp(fridaGroup.position.x + 0.15, -1.6, 1.6); });
+document.getElementById('bigger').addEventListener('click', ()=>{ baseScale = clamp(baseScale + 0.08, 0.4, 2.2); fridaGroup.scale.setScalar(baseScale); });
+document.getElementById('smaller').addEventListener('click', ()=>{ baseScale = clamp(baseScale - 0.08, 0.4, 2.2); fridaGroup.scale.setScalar(baseScale); });
+
+// tocar el chip de modo alterna entre seguimiento automático y manual
+modeChip.addEventListener('click', ()=>{
+  autoFollow = !autoFollow;
+  updateModeChip();
+});
+
+function updateModeChip(){
+  if(autoFollow){
+    modeChip.classList.remove('manual');
+    modeLabel.textContent = faceTrackingReady ? 'Sigue tu movimiento' : 'Buscando tu rostro…';
+    hint.textContent = 'Frida te sigue sola — toca el modo para ajustarla a mano';
+  } else {
+    modeChip.classList.add('manual');
+    modeLabel.textContent = 'Modo manual';
+    hint.textContent = 'Arrastra la pantalla o usa los botones para ajustar a Frida';
+  }
+}
+
+function onResize(){
+  camera3.aspect = wrap.clientWidth / wrap.clientHeight;
+  camera3.updateProjectionMatrix();
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+}
+window.addEventListener('resize', onResize);
+
+renderer.setAnimationLoop(()=>{
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+  if(mixer) mixer.update(dt);
+  updatePetals(dt, t);
+  renderer.render(scene, camera3);
+});
+
+// ================= SEGUIMIENTO DE ROSTRO (filtro AR) =================
+let autoFollow = true;
+let faceTrackingReady = false;
+let faceMesh = null;
+let smoothX = fridaGroup.position.x;
+let smoothScale = 1;
+let sideOffset = 0.55; // de qué lado de tu rostro aparece Frida
+
+function initFaceTracking(){
+  if(typeof FaceMesh === 'undefined'){
+    console.warn('FaceMesh no disponible; se usa solo el modo manual.');
+    return;
+  }
+  faceMesh = new FaceMesh({
+    locateFile: (file)=> `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+  });
+  faceMesh.setOptions({
+    maxNumFaces: 1,
+    refineLandmarks: false,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+  faceMesh.onResults(onFaceResults);
+  pumpFace();
+}
+
+let lastSend = 0;
+function pumpFace(){
+  requestAnimationFrame(pumpFace);
+  if(!faceMesh || video.readyState < 2) return;
+  const now = performance.now();
+  if(now - lastSend < 66) return; // ~15fps es suficiente para seguir el rostro
+  lastSend = now;
+  faceMesh.send({ image: video }).catch(()=>{});
+}
+
+function onFaceResults(results){
+  const faces = results.multiFaceLandmarks;
+  if(!faces || !faces.length){
+    if(!faceTrackingReady) return;
+    return;
+  }
+  if(!faceTrackingReady){
+    faceTrackingReady = true;
+    if(autoFollow) updateModeChip();
+  }
+  const lm = faces[0];
+
+  // el video se muestra reflejado (CSS scaleX(-1)); reflejamos la coordenada
+  // para que el seguimiento coincida con lo que la persona ve en pantalla
+  const nose = lm[1];
+  const mirroredX = 1 - nose.x; // 0 = izquierda de la pantalla, 1 = derecha
+
+  // bbox aproximado del rostro para estimar distancia a la cámara
+  let minX=1, maxX=0, minY=1, maxY=0;
+  for(let i=0;i<lm.length;i+=6){
+    const p = lm[i];
+    if(p.x<minX) minX=p.x; if(p.x>maxX) maxX=p.x;
+    if(p.y<minY) minY=p.y; if(p.y>maxY) maxY=p.y;
+  }
+  const faceWidth = maxX - minX;
+
+  if(!autoFollow) return;
+
+  // Frida se para al lado de tu rostro, del lado con más espacio en pantalla
+  sideOffset = mirroredX < 0.5 ? 0.55 : -0.55;
+  const targetX = clamp((mirroredX - 0.5) * 2.2 + sideOffset, -1.6, 1.6);
+  const targetScale = clamp(faceWidth / 0.16, 0.55, 1.5);
+
+  smoothX = THREE.MathUtils.lerp(smoothX, targetX, 0.12);
+  smoothScale = THREE.MathUtils.lerp(smoothScale, targetScale, 0.1);
+
+  fridaGroup.position.x = smoothX;
+  baseScale = smoothScale;
+  fridaGroup.scale.setScalar(baseScale);
+}
+
+// ---------- cámara ----------
+async function startCamera(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1440 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+    statusEl.classList.add('hidden');
+    controlsEl.classList.remove('hidden');
+    modeChip.classList.remove('hidden');
+    updateModeChip();
+    if(!modelLoaded && !modelLoadFailed){
+      loadingEl.classList.remove('hidden');
+    }
+    initFaceTracking();
+  }catch(err){
+    statusEl.innerHTML = '<p class="eyebrow">Sala Frida Kahlo</p><h2>No pudimos activar tu cámara</h2><p>Revisa los permisos del navegador e inténtalo de nuevo.</p><button id="retry-btn">Reintentar</button>';
+    document.getElementById('retry-btn').addEventListener('click', startCamera);
+  }
+}
+startBtn.addEventListener('click', startCamera);
+
+// ---------- captura de foto (video + escena 3D compuestos) ----------
+shutter.addEventListener('click', ()=>{
+  flash.style.transition = 'none';
+  flash.style.opacity = '0.85';
+  requestAnimationFrame(()=>{
+    flash.style.transition = 'opacity 350ms ease';
+    flash.style.opacity = '0';
+  });
+
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+
+  ctx.save();
+  ctx.translate(w, 0);
+  ctx.scale(-1, 1);
+
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const videoRatio = vw / vh, canvasRatio = w / h;
+  let sx, sy, sw, sh;
+  if(videoRatio > canvasRatio){
+    sh = vh; sw = vh * canvasRatio; sx = (vw - sw) / 2; sy = 0;
+  } else {
+    sw = vw; sh = vw / canvasRatio; sx = 0; sy = (vh - sh) / 2;
+  }
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+  ctx.restore();
+
+  ctx.drawImage(renderer.domElement, 0, 0, w, h);
+
+  ctx.font = '11px Inter, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
+  ctx.textAlign = 'right';
+  ctx.fillText('Modelo 3D "Frida Crying" · queenawzq (Sketchfab) · CC-BY-4.0', w - 12, h - 12);
+
+  resultImg.src = out.toDataURL('image/png');
+  resultEl.style.display = 'flex';
+});
+
+document.getElementById('close-result').addEventListener('click', ()=>{
+  resultEl.style.display = 'none';
+});
+document.getElementById('dl').addEventListener('click', ()=>{
+  const a = document.createElement('a');
+  a.href = resultImg.src;
+  a.download = 'selfie-con-frida.png';
+  a.click();
+});
+</script>
+</body>
+</html>
