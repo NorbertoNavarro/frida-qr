@@ -5,82 +5,117 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Selfie con Frida — The Chronos Experience</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#2B2118; --paper:#F6F1E4; --accent:#3E5C3A; --line: rgba(255,255,255,0.35);
+    --paper:#F6F1E4; --paper-2:#EFE8D6; --ink:#2B2118;
+    --accent:#A23324; --accent-ink:#5A1B12;
+    --verde:#3E5C3A; --verde-ink:#233420;
+    --rojo:#A23324; --rojo-ink:#5A1B12;
+    --mostaza:#D99A2B; --mostaza-ink:#7A5312;
+    --line: rgba(43,33,24,0.16);
+    --line-onvideo: rgba(246,241,228,0.35);
   }
   *{box-sizing:border-box;}
-  html,body{ margin:0; height:100%; background:#000; overflow:hidden; font-family:'Inter',sans-serif; }
+  html,body{ margin:0; height:100%; background:#000; overflow:hidden; font-family:'Inter',sans-serif; -webkit-tap-highlight-color:transparent; }
 
   #stage{ position:fixed; inset:0; }
   #cam{
     position:absolute; inset:0; width:100%; height:100%;
     object-fit:cover; transform:scaleX(-1);
   }
-  #three-wrap{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  #three-wrap{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; opacity:0; transition:opacity .6s ease; pointer-events:none; }
+  #three-wrap.visible{ opacity:1; pointer-events:auto; }
   #three-wrap canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
 
-  #top-bar{
-    position:absolute; top:0; left:0; right:0; padding:18px 18px 0;
-    display:flex; align-items:center; justify-content:space-between;
-    color:#fff; text-shadow:0 1px 6px rgba(0,0,0,.5);
+  /* ---------- shared "paper card" chrome, echoes the passport pages ---------- */
+  .paper-chip{
+    background:rgba(246,241,228,0.92); color:var(--ink);
+    border:1px solid rgba(43,33,24,0.1);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    box-shadow:0 6px 24px rgba(0,0,0,.18);
   }
-  .eyebrow{ font-size:11px; letter-spacing:.12em; text-transform:uppercase; opacity:.85; margin:0; }
-  h1{ font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin:2px 0 0; }
+  .eyebrow{
+    font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; opacity:.62;
+    margin:0; border-left:2px solid var(--accent); padding-left:8px;
+  }
+
+  #top-bar{
+    position:absolute; top:0; left:0; right:0; padding:16px 16px 0;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+  }
+  #title-chip{ border-radius:16px; padding:10px 16px 12px; max-width:76%; }
+  #title-chip h1{ font-family:'Fraunces',serif; font-weight:500; font-size:16.5px; margin:3px 0 0; line-height:1.25; }
+
+  #mode-chip{
+    border-radius:999px; padding:8px 13px; font-size:11px; font-weight:600;
+    display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer;
+  }
+  #mode-chip .dot{ width:7px; height:7px; border-radius:50%; background:var(--verde); }
+  #mode-chip.manual .dot{ background:var(--mostaza); }
 
   #status{
-    position:absolute; left:0; right:0; top:50%; transform:translateY(-50%);
-    text-align:center; color:#fff; padding:0 30px; font-size:13px; line-height:1.6; opacity:.9;
-    text-shadow:0 1px 6px rgba(0,0,0,.6);
+    position:absolute; left:16px; right:16px; top:50%; transform:translateY(-50%);
+    border-radius:18px; padding:26px 22px; text-align:center;
   }
+  #status .eyebrow{ display:inline-block; margin-bottom:10px; }
+  #status h2{ font-family:'Fraunces',serif; font-weight:500; font-size:20px; margin:0 0 10px; }
+  #status p{ font-size:13.5px; line-height:1.65; opacity:.82; margin:0; }
   #status button{
-    margin-top:14px; background:#3E5C3A; color:#fff; border:none; border-radius:999px;
-    padding:11px 22px; font-size:13px; font-weight:600; font-family:inherit; letter-spacing:.02em;
+    margin-top:18px; background:var(--verde); color:var(--paper); border:none; border-radius:999px;
+    padding:13px 26px; font-size:13.5px; font-weight:600; font-family:inherit; letter-spacing:.02em;
+    cursor:pointer;
   }
 
   #model-loading{
-    position:absolute; left:0; right:0; top:50%; transform:translateY(-50%);
-    text-align:center; color:#fff; font-size:12px; opacity:.85; text-shadow:0 1px 6px rgba(0,0,0,.6);
+    position:absolute; left:0; right:0; top:calc(50% + 96px); display:flex; justify-content:center;
   }
+  #model-loading .paper-chip{ border-radius:999px; padding:8px 16px; font-size:11.5px; }
 
   #controls{
-    position:absolute; left:0; right:0; bottom:0; padding:16px 16px 22px;
-    display:flex; flex-direction:column; gap:10px; align-items:center;
+    position:absolute; left:0; right:0; bottom:0; padding:14px 16px 24px;
+    display:flex; flex-direction:column; gap:12px; align-items:center;
   }
-  .hint{ color:#fff; font-size:11px; opacity:.75; text-shadow:0 1px 6px rgba(0,0,0,.6); margin:0 0 2px; }
+  .hint-chip{
+    border-radius:999px; padding:7px 14px; font-size:11px; text-align:center;
+    display:flex; align-items:center; gap:6px;
+  }
   .row{ display:flex; gap:10px; }
   .ctrl-btn{
-    width:42px; height:42px; border-radius:50%; border:1px solid var(--line);
-    background:rgba(0,0,0,0.35); color:#fff; font-size:17px; display:flex;
-    align-items:center; justify-content:center; backdrop-filter:blur(6px);
+    width:42px; height:42px; border-radius:50%; border:1px solid rgba(43,33,24,0.12);
+    background:rgba(246,241,228,0.85); color:var(--ink); font-size:16px; display:flex;
+    align-items:center; justify-content:center; backdrop-filter:blur(8px); cursor:pointer;
   }
+  .ctrl-btn:active{ transform:scale(0.92); }
   #shutter{
-    width:66px; height:66px; border-radius:50%; border:3px solid #fff;
-    background:rgba(255,255,255,0.15); backdrop-filter:blur(6px);
+    width:68px; height:68px; border-radius:50%; border:3px solid var(--verde);
+    background:rgba(246,241,228,0.25); backdrop-filter:blur(6px); cursor:pointer;
   }
   #shutter::after{
-    content:''; display:block; width:52px; height:52px; margin:4px; border-radius:50%; background:#fff;
+    content:''; display:block; width:54px; height:54px; margin:4px; border-radius:50%; background:var(--paper);
   }
+  #shutter:active{ transform:scale(0.95); }
   #shutter-row{ display:flex; align-items:center; gap:22px; }
 
   #flash{ position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; }
 
   #result{
-    position:fixed; inset:0; background:#111; display:none; flex-direction:column;
-    align-items:center; justify-content:center; z-index:20;
+    position:fixed; inset:0; background:var(--paper); display:none; flex-direction:column;
+    align-items:center; justify-content:center; z-index:20; padding:24px;
   }
-  #result img{ max-width:92%; max-height:72%; border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
-  #result .row{ margin-top:18px; }
+  #result .eyebrow{ margin-bottom:14px; }
+  #result h2{ font-family:'Fraunces',serif; font-weight:500; font-size:21px; margin:0 0 16px; color:var(--ink); }
+  #result img{ max-width:100%; max-height:60vh; border-radius:12px; box-shadow:0 14px 44px rgba(43,33,24,.28); border:1px solid var(--line); }
+  #result .row{ margin-top:20px; }
   #result button{
-    border:none; border-radius:999px; padding:12px 24px; font-family:inherit; font-weight:600; font-size:13px;
+    border:none; border-radius:999px; padding:13px 24px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer;
   }
-  #dl{ background:#3E5C3A; color:#fff; }
-  #close-result{ background:rgba(255,255,255,0.15); color:#fff; }
+  #dl{ background:var(--verde); color:var(--paper); }
+  #close-result{ background:transparent; color:var(--ink); border:1px solid var(--line)!important; }
 
   #credit{
-    position:absolute; right:10px; bottom:8px; font-size:9px; color:#fff; opacity:.55;
-    text-shadow:0 1px 4px rgba(0,0,0,.6); max-width:60%; text-align:right; line-height:1.4;
+    position:absolute; right:10px; bottom:8px; border-radius:999px; padding:5px 11px;
+    font-size:9px; opacity:.9; max-width:65%; text-align:right; line-height:1.4;
   }
 
   .hidden{ display:none!important; }
@@ -94,26 +129,29 @@
 </div>
 
 <div id="top-bar">
-  <div>
+  <div id="title-chip" class="paper-chip">
     <p class="eyebrow">The Chronos Experience</p>
     <h1>Selfie con Frida</h1>
   </div>
+  <div id="mode-chip" class="paper-chip hidden"><span class="dot"></span><span id="mode-label">Sigue tu movimiento</span></div>
 </div>
 
-<div id="status">
-  <p>Este filtro usa tu cámara para tomarte una foto junto a un modelo 3D de Frida Kahlo. Necesita permiso de cámara.</p>
+<div id="status" class="paper-chip">
+  <p class="eyebrow">Sala Frida Kahlo</p>
+  <h2>Tómate una foto junto a Frida</h2>
+  <p>Este filtro usa tu cámara para colocar un modelo 3D de Frida a tu lado, y la sigue mientras te mueves — como un filtro de realidad aumentada. Necesita permiso de cámara.</p>
   <button id="start-btn">Activar cámara</button>
 </div>
 
-<div id="model-loading" class="hidden"><p>Cargando a Frida…</p></div>
+<div id="model-loading" class="hidden"><div class="paper-chip">Cargando a Frida…</div></div>
 
 <div id="controls" class="hidden">
-  <p class="hint">Arrastra la pantalla para acomodar a Frida a tu lado</p>
+  <div class="hint-chip paper-chip" id="hint">Arrastra la pantalla o usa los botones para ajustar a Frida</div>
   <div class="row">
-    <div class="ctrl-btn" id="left">←</div>
-    <div class="ctrl-btn" id="smaller">−</div>
-    <div class="ctrl-btn" id="bigger">+</div>
-    <div class="ctrl-btn" id="right">→</div>
+    <div class="ctrl-btn" id="left" title="Mover a la izquierda">←</div>
+    <div class="ctrl-btn" id="smaller" title="Achicar">−</div>
+    <div class="ctrl-btn" id="bigger" title="Agrandar">+</div>
+    <div class="ctrl-btn" id="right" title="Mover a la derecha">→</div>
   </div>
   <div id="shutter-row">
     <div style="width:42px"></div>
@@ -125,6 +163,8 @@
 <div id="flash"></div>
 
 <div id="result">
+  <p class="eyebrow">Sala Frida Kahlo</p>
+  <h2>Tu recuerdo con Frida</h2>
   <img id="result-img" alt="Selfie con Frida">
   <div class="row">
     <button id="close-result">Cerrar</button>
@@ -132,7 +172,7 @@
   </div>
 </div>
 
-<div id="credit">Modelo 3D "Frida Crying" por queenawzq (Sketchfab) · CC-BY-4.0</div>
+<div id="credit" class="paper-chip">Modelo 3D "Frida Crying" por queenawzq (Sketchfab) · CC-BY-4.0</div>
 
 <script type="importmap">
 {
@@ -142,6 +182,7 @@
   }
 }
 </script>
+
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -156,6 +197,9 @@ const shutter = document.getElementById('shutter');
 const flash = document.getElementById('flash');
 const resultEl = document.getElementById('result');
 const resultImg = document.getElementById('result-img');
+const modeChip = document.getElementById('mode-chip');
+const modeLabel = document.getElementById('mode-label');
+const hint = document.getElementById('hint');
 
 // ---------- three.js scene (fondo transparente sobre el video) ----------
 const scene = new THREE.Scene();
@@ -163,7 +207,7 @@ const camera3 = new THREE.PerspectiveCamera(42, wrap.clientWidth / wrap.clientHe
 camera3.position.set(0, 1.05, 2.6);
 camera3.lookAt(0, 0.95, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 renderer.setClearColor(0x000000, 0);
@@ -183,9 +227,10 @@ scene.add(rim);
 
 // ---------- cargar el modelo real ----------
 const fridaGroup = new THREE.Group();
-let baseScale = 1;
+let userScaleMultiplier = 1; // ajuste artístico manual encima de su tamaño real
+let lateralOffset = 0.7;     // metros a los que se para junto a ti
 let loadedModel = null;
-let modelLoaded = false;      // true en cuanto termina de cargar, sin importar si la cámara ya inició
+let modelLoaded = false;
 let modelLoadFailed = false;
 let mixer = null;
 const clock = new THREE.Clock();
@@ -194,23 +239,19 @@ const loader = new GLTFLoader();
 loader.load('./scene.gltf', (gltf)=>{
   const model = gltf.scene;
 
-  // centrar y escalar el modelo para que quede de tamaño humano de pie
   const box = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3();
   box.getSize(size);
 
-  const targetHeight = 1.7; // metros aprox, como una persona
+  const targetHeight = 1.7;
   const scaleFactor = targetHeight / (size.y || 1);
   model.scale.setScalar(scaleFactor);
 
-  // recalcular caja tras escalar, para pararlo sobre el "piso" (y=0)
   const box2 = new THREE.Box3().setFromObject(model);
   model.position.x -= (box2.min.x + box2.max.x) / 2;
   model.position.z -= (box2.min.z + box2.max.z) / 2;
   model.position.y -= box2.min.y;
 
-  // reproducir la animación incluida: el modelo viene en pose T por defecto,
-  // la animación es la que lo deja en su pose natural
   if(gltf.animations && gltf.animations.length){
     mixer = new THREE.AnimationMixer(model);
     const action = mixer.clipAction(gltf.animations[0]);
@@ -226,13 +267,12 @@ undefined,
 (err)=>{
   console.error('Error cargando el modelo:', err);
   modelLoadFailed = true;
-  loadingEl.innerHTML = '<p>No se pudo cargar el modelo 3D.</p>';
+  loadingEl.querySelector('.paper-chip').textContent = 'No se pudo cargar el modelo 3D.';
 });
 
-fridaGroup.position.set(0.5, -0.85, 0); // a un lado, "parada" junto a ti
+fridaGroup.position.set(0.6, 0, 0.7); // de pie sobre el "piso" (y=0), a una profundidad inicial plausible
 scene.add(fridaGroup);
 
-// sombra suave en el piso
 const shadowGeo = new THREE.CircleGeometry(0.4, 24);
 const shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 });
 const shadow = new THREE.Mesh(shadowGeo, shadowMat);
@@ -240,9 +280,96 @@ shadow.rotation.x = -Math.PI/2;
 shadow.position.set(0, 0.005, 0);
 fridaGroup.add(shadow);
 
-// ---------- interacción: arrastrar para mover, botones para escalar/mover ----------
+// ================= LLUVIA DE PÉTALOS DE ROSA =================
+function makePetalTexture(){
+  const c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.translate(32,32);
+  const grad = ctx.createLinearGradient(0,-28,0,28);
+  grad.addColorStop(0, '#F7DCD3');
+  grad.addColorStop(0.45, '#E38C82');
+  grad.addColorStop(1, '#A23324');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(0,-27);
+  ctx.bezierCurveTo(19,-21, 21,6, 0,27);
+  ctx.bezierCurveTo(-21,6, -19,-21, 0,-27);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-in';
+  const fade = ctx.createRadialGradient(0,0,4,0,0,30);
+  fade.addColorStop(0,'rgba(0,0,0,1)');
+  fade.addColorStop(1,'rgba(0,0,0,0.75)');
+  ctx.fillStyle = fade;
+  ctx.beginPath(); ctx.arc(0,0,30,0,Math.PI*2); ctx.fill();
+  return new THREE.CanvasTexture(c);
+}
+const petalTexture = makePetalTexture();
+
+function visibleWidthAtZ(z){
+  const dist = camera3.position.z - z;
+  const vFOV = camera3.fov * Math.PI/180;
+  const h = 2*Math.tan(vFOV/2)*dist;
+  return h*camera3.aspect;
+}
+
+const PETAL_COUNT = 26;
+const petals = [];
+const petalGroup = new THREE.Group();
+scene.add(petalGroup);
+
+function spawnPetal(p, fresh){
+  const z = THREE.MathUtils.randFloat(-0.6, 1.9);
+  const halfW = visibleWidthAtZ(z) / 2;
+  p.z = z;
+  p.x = THREE.MathUtils.randFloat(-halfW, halfW);
+  p.y = fresh ? THREE.MathUtils.randFloat(0.6, 2.4) : 2.4 + Math.random()*0.6;
+  p.vy = THREE.MathUtils.randFloat(0.11, 0.26);
+  p.swayAmp = THREE.MathUtils.randFloat(0.08, 0.22);
+  p.swaySpeed = THREE.MathUtils.randFloat(0.5, 1.1);
+  p.swayPhase = Math.random()*Math.PI*2;
+  p.spin = THREE.MathUtils.randFloat(-0.6, 0.6);
+  p.baseX = p.x;
+}
+
+for(let i=0;i<PETAL_COUNT;i++){
+  const mat = new THREE.SpriteMaterial({ map: petalTexture, transparent:true, depthWrite:false, opacity:0.92 });
+  const sprite = new THREE.Sprite(mat);
+  const s = THREE.MathUtils.randFloat(0.07, 0.15);
+  sprite.scale.set(s, s, 1);
+  const p = { sprite, x:0, y:0, z:0, vy:0, swayAmp:0, swaySpeed:0, swayPhase:0, spin:0, baseX:0, rot:Math.random()*Math.PI*2 };
+  spawnPetal(p, true);
+  sprite.position.set(p.x, p.y, p.z);
+  sprite.material.rotation = p.rot;
+  petalGroup.add(sprite);
+  petals.push(p);
+}
+
+function updatePetals(dt, t){
+  for(const p of petals){
+    p.y -= p.vy * dt;
+    p.rot += p.spin * dt;
+    const sway = Math.sin(t*p.swaySpeed + p.swayPhase) * p.swayAmp;
+    p.sprite.position.set(p.baseX + sway, p.y, p.z);
+    p.sprite.material.rotation = p.rot;
+    if(p.y < -1.4){
+      spawnPetal(p, false);
+      p.sprite.position.set(p.x, p.y, p.z);
+    }
+  }
+}
+
+// ---------- interacción manual: arrastrar / botones ----------
 let dragging = false, lastX = 0, lastY = 0;
 function clamp(v, min, max){ return Math.max(min, Math.min(max, v)); }
+
+function goManual(){
+  if(autoFollow){
+    autoFollow = false;
+    updateModeChip();
+  }
+}
 
 wrap.addEventListener('pointerdown', (e)=>{
   dragging = true; lastX = e.clientX; lastY = e.clientY;
@@ -257,16 +384,50 @@ function onDragMove(e){
   const dx = e.clientX - lastX;
   const dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
-  fridaGroup.position.x = clamp(fridaGroup.position.x + dx * 0.004, -1.6, 1.6);
-  fridaGroup.position.y = clamp(fridaGroup.position.y - dy * 0.003, -1.3, -0.2);
+  if(Math.abs(dx) > 2 || Math.abs(dy) > 2) goManual();
+  fridaGroup.position.x = clamp(fridaGroup.position.x + dx * 0.004, -2.2, 2.2);
+  fridaGroup.position.y = clamp(fridaGroup.position.y - dy * 0.003, -0.5, 0.6);
 }
 wrap.addEventListener('pointermove', onDragMove);
 window.addEventListener('pointermove', onDragMove);
 
-document.getElementById('left').addEventListener('click', ()=> fridaGroup.position.x = clamp(fridaGroup.position.x - 0.15, -1.6, 1.6));
-document.getElementById('right').addEventListener('click', ()=> fridaGroup.position.x = clamp(fridaGroup.position.x + 0.15, -1.6, 1.6));
-document.getElementById('bigger').addEventListener('click', ()=>{ baseScale = clamp(baseScale + 0.08, 0.4, 2.2); fridaGroup.scale.setScalar(baseScale); });
-document.getElementById('smaller').addEventListener('click', ()=>{ baseScale = clamp(baseScale - 0.08, 0.4, 2.2); fridaGroup.scale.setScalar(baseScale); });
+// en modo automático, ←/→ ajustan qué tan separada camina de tu lado;
+// en modo manual, mueven a Frida directamente
+document.getElementById('left').addEventListener('click', ()=>{
+  if(autoFollow){ lateralOffset = clamp(lateralOffset - 0.12, 0.3, 1.5); }
+  else { fridaGroup.position.x = clamp(fridaGroup.position.x - 0.15, -2.2, 2.2); }
+});
+document.getElementById('right').addEventListener('click', ()=>{
+  if(autoFollow){ lateralOffset = clamp(lateralOffset + 0.12, 0.3, 1.5); }
+  else { fridaGroup.position.x = clamp(fridaGroup.position.x + 0.15, -2.2, 2.2); }
+});
+// +/- son un ajuste artístico fino sobre su tamaño real, funcionan en ambos modos
+document.getElementById('bigger').addEventListener('click', ()=>{ userScaleMultiplier = clamp(userScaleMultiplier + 0.06, 0.7, 1.5); fridaGroup.scale.setScalar(userScaleMultiplier); });
+document.getElementById('smaller').addEventListener('click', ()=>{ userScaleMultiplier = clamp(userScaleMultiplier - 0.06, 0.7, 1.5); fridaGroup.scale.setScalar(userScaleMultiplier); });
+
+// tocar el chip de modo alterna entre seguimiento automático y manual
+modeChip.addEventListener('click', ()=>{
+  autoFollow = !autoFollow;
+  if(autoFollow && (faceTrackingFailed || !faceLandmarker)){
+    // el usuario quiere reintentar el seguimiento automático
+    faceTrackingFailed = false;
+    faceTrackingReady = false;
+    initFaceTracking();
+  }
+  updateModeChip();
+});
+
+function updateModeChip(){
+  if(autoFollow){
+    modeChip.classList.remove('manual');
+    modeLabel.textContent = faceTrackingReady ? 'Sigue tu movimiento' : 'Buscando tu rostro…';
+    hint.textContent = 'Frida te sigue sola — toca el modo para ajustarla a mano';
+  } else {
+    modeChip.classList.add('manual');
+    modeLabel.textContent = faceTrackingFailed ? 'Seguimiento no disponible' : 'Modo manual';
+    hint.textContent = 'Arrastra la pantalla o usa los botones para ajustar a Frida';
+  }
+}
 
 function onResize(){
   camera3.aspect = wrap.clientWidth / wrap.clientHeight;
@@ -276,9 +437,126 @@ function onResize(){
 window.addEventListener('resize', onResize);
 
 renderer.setAnimationLoop(()=>{
-  if(mixer) mixer.update(clock.getDelta());
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+  if(mixer) mixer.update(dt);
+  updatePetals(dt, t);
   renderer.render(scene, camera3);
 });
+
+// ================= SEGUIMIENTO DE ROSTRO (filtro AR) =================
+let autoFollow = true;
+let faceTrackingReady = false;
+let faceTrackingFailed = false;
+let faceLandmarker = null;
+let smoothX = fridaGroup.position.x;
+let smoothZ = fridaGroup.position.z;
+const EYE_DISTANCE_M = 0.062; // separación promedio entre ojos de un adulto, para estimar distancia real
+const FLOOR_Y = 0;
+
+function markFaceTrackingFailed(reason){
+  if(faceTrackingFailed) return;
+  faceTrackingFailed = true;
+  console.warn('Rastreo facial no disponible:', reason);
+  if(autoFollow){
+    autoFollow = false;
+    updateModeChip();
+  }
+}
+
+async function initFaceTracking(){
+  try{
+    const { FaceLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const filesetResolver = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    const baseOptions = {
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+    };
+    let landmarker;
+    try{
+      landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { ...baseOptions, delegate: 'GPU' },
+        runningMode: 'VIDEO',
+        numFaces: 1
+      });
+    }catch(gpuErr){
+      console.warn('El delegado GPU falló, probando CPU:', gpuErr);
+      landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { ...baseOptions, delegate: 'CPU' },
+        runningMode: 'VIDEO',
+        numFaces: 1
+      });
+    }
+    faceLandmarker = landmarker;
+    trackFaceLoop();
+    // si en 8s no se detecta ningún rostro, avisamos y pasamos a modo manual
+    // (el usuario puede reactivar el modo automático tocando el chip)
+    setTimeout(()=>{
+      if(!faceTrackingReady){
+        markFaceTrackingFailed('no se detectó ningún rostro a tiempo.');
+      }
+    }, 8000);
+  }catch(err){
+    markFaceTrackingFailed(err);
+  }
+}
+
+let lastVideoTime = -1;
+function trackFaceLoop(){
+  requestAnimationFrame(trackFaceLoop);
+  if(!faceLandmarker || video.readyState < 2 || !video.videoWidth) return;
+  if(video.currentTime === lastVideoTime) return; // esperar a un cuadro nuevo
+  lastVideoTime = video.currentTime;
+  try{
+    const result = faceLandmarker.detectForVideo(video, performance.now());
+    onFaceResults(result);
+  }catch(err){
+    markFaceTrackingFailed(err);
+  }
+}
+
+function onFaceResults(result){
+  const faces = result.faceLandmarks;
+  if(!faces || !faces.length) return;
+  if(!faceTrackingReady){
+    faceTrackingReady = true;
+    if(autoFollow) updateModeChip();
+  }
+  if(!autoFollow) return;
+  const lm = faces[0];
+
+  // distancia entre las esquinas externas de los ojos (índices estándar de la
+  // topología de 468 puntos), en coordenadas normalizadas del cuadro de video
+  const eyeL = lm[33], eyeR = lm[263];
+  const eyeDistNorm = Math.max(0.01, Math.hypot(eyeR.x - eyeL.x, eyeR.y - eyeL.y));
+
+  // modelo de cámara "pinhole": con el FOV de nuestra cámara 3D y el tamaño
+  // aparente de los ojos, estimamos a cuántos metros reales está tu rostro
+  const vFOV = camera3.fov * Math.PI/180;
+  const hFOV = 2*Math.atan(Math.tan(vFOV/2)*camera3.aspect);
+  const worldWidthPerDepth = 2*Math.tan(hFOV/2); // ancho de la vista (en metros) a 1m de profundidad
+  const depth = clamp(EYE_DISTANCE_M / (eyeDistNorm * worldWidthPerDepth), 0.5, 4.5);
+
+  // posición x real de tu rostro en el mundo, a esa profundidad
+  const nose = lm[1];
+  const mirroredX = 1 - nose.x; // el video se ve reflejado (CSS scaleX(-1))
+  const faceWorldX = (mirroredX - 0.5) * worldWidthPerDepth * depth;
+
+  // Frida se para junto a ti, del lado con más espacio en pantalla, a la
+  // misma profundidad que tu rostro — por eso aparece a tu tamaño real
+  const sideSign = mirroredX < 0.5 ? 1 : -1;
+  const targetX = clamp(faceWorldX + sideSign * lateralOffset, -2.4, 2.4);
+  const targetZ = clamp(camera3.position.z - depth, -1.6, 2.2);
+
+  smoothX = THREE.MathUtils.lerp(smoothX, targetX, 0.12);
+  smoothZ = THREE.MathUtils.lerp(smoothZ, targetZ, 0.12);
+
+  fridaGroup.position.x = smoothX;
+  fridaGroup.position.z = smoothZ;
+  fridaGroup.position.y = FLOOR_Y;
+  fridaGroup.scale.setScalar(userScaleMultiplier); // su altura real (1.70m) ya está en el modelo
+}
 
 // ---------- cámara ----------
 async function startCamera(){
@@ -291,13 +569,15 @@ async function startCamera(){
     await video.play();
     statusEl.classList.add('hidden');
     controlsEl.classList.remove('hidden');
-    // el modelo empieza a cargar desde que se abre la página; si para cuando
-    // se activa la cámara ya terminó (o falló), no mostramos el texto de carga
+    modeChip.classList.remove('hidden');
+    wrap.classList.add('visible');
+    updateModeChip();
     if(!modelLoaded && !modelLoadFailed){
       loadingEl.classList.remove('hidden');
     }
+    initFaceTracking();
   }catch(err){
-    statusEl.innerHTML = '<p>No se pudo activar la cámara. Revisa los permisos del navegador e inténtalo de nuevo.</p><button id="retry-btn">Reintentar</button>';
+    statusEl.innerHTML = '<p class="eyebrow">Sala Frida Kahlo</p><h2>No pudimos activar tu cámara</h2><p>Revisa los permisos del navegador e inténtalo de nuevo.</p><button id="retry-btn">Reintentar</button>';
     document.getElementById('retry-btn').addEventListener('click', startCamera);
   }
 }
@@ -334,7 +614,6 @@ shutter.addEventListener('click', ()=>{
 
   ctx.drawImage(renderer.domElement, 0, 0, w, h);
 
-  // crédito del modelo, discreto, en la esquina de la foto
   ctx.font = '11px Inter, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.65)';
   ctx.textAlign = 'right';
