@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frida en AR — The Chronos Experience</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F1E4; --paper-2:#EFE8D6; --ink:#2B2118;
+    --accent:#3E5C3A; --accent-ink:#233420;
+    --line: rgba(43,33,24,0.16);
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; }
+  .page{ max-width:560px; margin:0 auto; padding:28px 0 40px; }
+  .head{ padding:0 24px; }
+  .eyebrow{ font-size:12px; letter-spacing:.12em; text-transform:uppercase; opacity:.6; margin:0 0 14px; border-left:3px solid var(--accent); padding-left:10px; }
+  .yr{ font-size:13px; letter-spacing:.08em; text-transform:uppercase; opacity:.55; margin-bottom:4px; }
+  h1{ font-family:'Fraunces',serif; font-weight:500; font-size:26px; line-height:1.2; margin:0 0 14px; }
+
+  #cam-wrap{
+    position:relative;
+    width:100%; height:66vh; min-height:400px;
+    background:#111; overflow:hidden;
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    touch-action:none;
+  }
+  #cam-wrap video{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; transform:scaleX(-1);
+  }
+  #cam-wrap canvas{
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+  }
+  .hint{
+    position:absolute; left:0; right:0; bottom:10px; text-align:center;
+    font-size:11px; color:#fff; opacity:.75; pointer-events:none;
+    text-shadow:0 1px 3px rgba(0,0,0,.6);
+  }
+  .badge{
+    position:absolute; top:10px; left:10px; font-size:10px; letter-spacing:.06em; text-transform:uppercase;
+    background:rgba(0,0,0,.45); color:#fff; padding:5px 10px; border-radius:999px; pointer-events:none;
+  }
+  .status{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:14px; padding:24px; text-align:center;
+    background:var(--paper-2); color:var(--ink); font-size:13px; line-height:1.6;
+  }
+  .status button{
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:600; letter-spacing:.02em;
+    background:var(--accent); color:#fff; border:none; border-radius:999px;
+    padding:10px 22px; cursor:pointer;
+  }
+  .status.hidden{ display:none; }
+
+  .controls{ padding:16px 24px 0; display:flex; gap:10px; flex-wrap:wrap; }
+  .btn{
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:600; letter-spacing:.02em;
+    background:#fff; color:var(--ink); border:1px solid var(--line); border-radius:999px;
+    padding:9px 16px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  }
+  .btn.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn:active{ transform:scale(.97); }
+  .btn:disabled{ opacity:.4; cursor:default; }
+
+  .body{ padding:18px 24px 0; }
+  .desc{ font-size:14px; line-height:1.7; opacity:.85; margin:0 0 10px; }
+  .note{ font-size:11px; opacity:.55; line-height:1.6; border-top:1px solid var(--line); padding-top:14px; margin-top:14px; }
+
+  #result{
+    position:fixed; inset:0; background:rgba(20,16,10,.92); z-index:50;
+    display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; padding:24px;
+  }
+  #result.show{ display:flex; }
+  #result img{ max-width:min(92vw,480px); max-height:64vh; border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #result .row{ display:flex; gap:10px; }
+  #result a.btn.primary, #result button.btn.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  /* dom-overlay UI shown while inside a real WebXR AR session */
+  #ar-overlay{
+    position:fixed; inset:0; pointer-events:none; z-index:40; display:none;
+  }
+  #ar-overlay.show{ display:block; }
+  #ar-overlay .top{
+    position:absolute; top:16px; left:16px; right:16px; display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
+  }
+  #ar-overlay .pill{
+    pointer-events:none; background:rgba(0,0,0,.5); color:#fff; font-size:11.5px; line-height:1.5;
+    padding:8px 12px; border-radius:12px; max-width:280px;
+  }
+  #ar-overlay button{
+    pointer-events:auto; font-family:'Inter',sans-serif; font-weight:600; font-size:12.5px;
+    background:rgba(0,0,0,.55); color:#fff; border:1px solid rgba(255,255,255,.25); border-radius:999px;
+    padding:9px 16px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <p class="eyebrow">The Chronos Experience · Sala Frida Kahlo</p>
+    <div class="yr">Realidad aumentada</div>
+    <h1>Frida a tu lado, en AR</h1>
+  </div>
+
+  <div id="cam-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="three-canvas"></canvas>
+    <span class="badge" id="mode-badge">Modo cámara</span>
+    <p class="hint" id="hint-text">Arrastra para moverla · pellizca o rueda para acercarla</p>
+    <div class="status" id="status">
+      <p>Necesitamos permiso de tu cámara para colocar a Frida a tu lado.</p>
+      <button id="start-btn">Activar cámara</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="ar-btn" disabled>Ver a Frida en AR</button>
+    <button class="btn" id="flip-side">↔ Cambiar de lado</button>
+    <button class="btn" id="flip-cam">⟳ Cambiar cámara</button>
+    <button class="btn" id="shoot">📸 Tomar foto</button>
+  </div>
+
+  <div class="body">
+    <p class="desc">En dispositivos compatibles (Android + Chrome con ARCore), "Ver a Frida en AR" la coloca de pie en tu espacio real usando la cámara del sistema: puedes rodearla, alejarte y acercarte como si estuviera ahí. Toca el suelo para colocarla o moverla de lugar.</p>
+    <p class="desc">Si tu equipo no soporta AR (por ejemplo iPhone o computadora), se usa el modo cámara: una superposición 2D que tú acomodas arrastrando, con botón para tomar la foto directamente aquí.</p>
+    <p class="note">Detalle técnico: durante una sesión de AR real, el sistema no permite capturar la imagen de la cámara del mundo real desde la página por privacidad — para guardar la foto en AR usa la captura de pantalla nativa de tu teléfono. El botón "Tomar foto" de esta página solo funciona en modo cámara.</p>
+  </div>
+</div>
+
+<div id="ar-overlay">
+  <div class="top">
+    <div class="pill" id="ar-pill">Toca el suelo para colocar a Frida. Usa la captura de pantalla de tu teléfono para guardar la foto.</div>
+    <button id="ar-exit">Salir</button>
+  </div>
+</div>
+
+<div id="result">
+  <img id="result-img" alt="Foto con Frida">
+  <div class="row">
+    <button class="btn" id="retake">Repetir</button>
+    <a class="btn primary" id="download" download="frida-selfie.png">Descargar</a>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const wrap = document.getElementById('cam-wrap');
+const video = document.getElementById('video');
+const statusEl = document.getElementById('status');
+const startBtn = document.getElementById('start-btn');
+const arBtn = document.getElementById('ar-btn');
+const flipSideBtn = document.getElementById('flip-side');
+const flipCamBtn = document.getElementById('flip-cam');
+const shootBtn = document.getElementById('shoot');
+const resultEl = document.getElementById('result');
+const resultImg = document.getElementById('result-img');
+const retakeBtn = document.getElementById('retake');
+const downloadBtn = document.getElementById('download');
+const modeBadge = document.getElementById('mode-badge');
+const hintText = document.getElementById('hint-text');
+const arOverlay = document.getElementById('ar-overlay');
+const arExitBtn = document.getElementById('ar-exit');
+
+let facingMode = 'user';
+let mirrored = true;
+let stream = null;
+let inAR = false;
+
+// ---- scene / renderer (shared by fallback overlay and real AR) ----
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, wrap.clientWidth / wrap.clientHeight, 0.02, 30);
+camera.position.set(0, 1.1, 3.1);
+camera.lookAt(0, 0.95, 0);
+
+const canvasEl = document.getElementById('three-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+renderer.xr.enabled = true;
+
+scene.add(new THREE.AmbientLight(0xfff2df, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 1.0);
+key.position.set(1.2, 3, 2);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xdfeaff, 0.5);
+fill.position.set(-2, 1, 1.5);
+scene.add(fill);
+
+const shadowDisc = new THREE.Mesh(
+  new THREE.CircleGeometry(0.42, 32),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 })
+);
+shadowDisc.rotation.x = -Math.PI / 2;
+shadowDisc.position.y = 0.001;
+
+function makeLeaf(len, w, color){
+  const s = new THREE.Shape();
+  s.moveTo(0,0);
+  s.quadraticCurveTo(w, len*0.35, 0, len);
+  s.quadraticCurveTo(-w, len*0.35, 0, 0);
+  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.012, bevelEnabled: false });
+  return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 0.7, side: THREE.DoubleSide }));
+}
+function makeMonkey(color){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 14), mat);
+  body.scale.set(1, 1.3, 0.9);
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.042, 14, 14), mat);
+  head.position.set(0, 0.08, 0.015);
+  g.add(head);
+  const tailCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0,-0.03,-0.05),
+    new THREE.Vector3(0.04,0.03,-0.1),
+    new THREE.Vector3(0.015,0.1,-0.09)
+  ]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 16, 0.009, 8, false), mat));
+  return g;
+}
+
+function buildFrida(){
+  const frida = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: 0xE8C39E, roughness: 0.6 });
+  const blouse = new THREE.MeshStandardMaterial({ color: 0x8C2F2A, roughness: 0.65 });
+  const skirt = new THREE.MeshStandardMaterial({ color: 0x3E5C3A, roughness: 0.65 });
+
+  const skirtMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.34, 0.85, 24), skirt);
+  skirtMesh.position.y = 0.43;
+  frida.add(skirtMesh);
+
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.14, 0.5, 20), blouse);
+  torso.position.y = 1.06;
+  frida.add(torso);
+
+  [-1, 1].forEach(side => {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.42, 12), blouse);
+    arm.position.set(side * 0.2, 0.92, 0.02);
+    arm.rotation.z = side * 0.32;
+    frida.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 12), skin);
+    hand.position.set(side * 0.32, 0.72, 0.05);
+    frida.add(hand);
+  });
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.09, 16), skin);
+  neck.position.y = 1.335;
+  frida.add(neck);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 24, 24), skin);
+  head.position.y = 1.47;
+  frida.add(head);
+
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.138, 24, 24, 0, Math.PI*2, 0, Math.PI*0.62),
+    new THREE.MeshStandardMaterial({ color: 0x1E140D, roughness: 0.55 })
+  );
+  hair.position.y = 1.485;
+  frida.add(hair);
+
+  const brow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.012, 0.01), new THREE.MeshStandardMaterial({ color: 0x1E140D }));
+  brow.position.set(0, 1.5, 0.122);
+  frida.add(brow);
+
+  const flowerColors = [0xD99A2B, 0xA23324, 0xE07B39];
+  for(let i=0;i<10;i++){
+    const a = (i / 10) * Math.PI * 2;
+    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 10), new THREE.MeshStandardMaterial({ color: flowerColors[i % flowerColors.length], roughness: 0.6 }));
+    petal.position.set(Math.cos(a)*0.125, 1.6 + Math.sin(a*3)*0.011, Math.sin(a)*0.125);
+    frida.add(petal);
+  }
+
+  const leafColors = [0x3E5C3A, 0x4C7248, 0x2E4A2C];
+  for(let i=0;i<6;i++){
+    const leaf = makeLeaf(0.3 + Math.random()*0.22, 0.1 + Math.random()*0.05, leafColors[i % leafColors.length]);
+    leaf.position.set((Math.random()-0.5)*0.5, 0.9 + Math.random()*0.55, -0.16 - Math.random()*0.1);
+    leaf.rotation.z = (Math.random()-0.5) * 1.3;
+    frida.add(leaf);
+  }
+
+  const monkey = makeMonkey(0x3B2A1E);
+  monkey.position.set(0.19, 1.28, 0.07);
+  monkey.rotation.y = -0.4;
+  frida.add(monkey);
+
+  return frida;
+}
+
+const rig = new THREE.Group();
+rig.add(shadowDisc);
+rig.add(buildFrida());
+rig.position.set(0.55, -0.62, 0);
+rig.visible = true; // visible immediately in fallback mode
+scene.add(rig);
+
+let currentSide = 1;
+let baseScale = 1;
+
+// ---- fallback-mode interaction (2D drag over the video) ----
+let dragging = false, lastX = 0, lastY = 0;
+function fallbackPointerDown(e){
+  if (inAR) return;
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  wrap.setPointerCapture(e.pointerId);
+}
+function fallbackPointerMove(e){
+  if (inAR || !dragging) return;
+  const dx = e.clientX - lastX, dy = e.clientY - lastY;
+  lastX = e.clientX; lastY = e.clientY;
+  rig.position.x += dx * 0.0035;
+  rig.position.y -= dy * 0.0035;
+  rig.position.x = Math.max(-1.6, Math.min(1.6, rig.position.x));
+  rig.position.y = Math.max(-1.1, Math.min(0.3, rig.position.y));
+}
+wrap.addEventListener('pointerdown', fallbackPointerDown);
+wrap.addEventListener('pointermove', fallbackPointerMove);
+window.addEventListener('pointerup', () => { dragging = false; });
+
+wrap.addEventListener('wheel', (e) => {
+  if (inAR) return;
+  e.preventDefault();
+  baseScale = Math.max(0.5, Math.min(2.2, baseScale - e.deltaY * 0.0012));
+  rig.scale.setScalar(baseScale);
+}, { passive: false });
+
+let pinchStartDist = null, pinchStartScale = 1;
+wrap.addEventListener('touchstart', (e) => {
+  if (inAR) return;
+  if (e.touches.length === 2) {
+    const [a,b] = e.touches;
+    pinchStartDist = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    pinchStartScale = baseScale;
+  }
+}, { passive: true });
+wrap.addEventListener('touchmove', (e) => {
+  if (inAR) return;
+  if (e.touches.length === 2 && pinchStartDist) {
+    const [a,b] = e.touches;
+    const d = Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+    baseScale = Math.max(0.5, Math.min(2.2, pinchStartScale * (d / pinchStartDist)));
+    rig.scale.setScalar(baseScale);
+  }
+}, { passive: true });
+wrap.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinchStartDist = null; });
+
+flipSideBtn.addEventListener('click', () => {
+  if (inAR) return;
+  currentSide *= -1;
+  rig.position.x = currentSide * 0.55;
+});
+
+function onResize(){
+  if (inAR) return;
+  camera.aspect = wrap.clientWidth / wrap.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+}
+window.addEventListener('resize', onResize);
+
+// ---- camera stream (fallback mode) ----
+async function startCamera(){
+  try{
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    mirrored = (facingMode === 'user');
+    video.style.transform = mirrored ? 'scaleX(-1)' : 'none';
+    statusEl.classList.add('hidden');
+  } catch (err){
+    statusEl.classList.remove('hidden');
+    statusEl.innerHTML = `<p>No pudimos acceder a la cámara (${err.name === 'NotAllowedError' ? 'permiso denegado' : 'error de cámara'}). Revisa los permisos del navegador e inténtalo de nuevo.</p><button id="start-btn2">Reintentar</button>`;
+    document.getElementById('start-btn2').addEventListener('click', startCamera);
+  }
+}
+startBtn.addEventListener('click', startCamera);
+flipCamBtn.addEventListener('click', () => {
+  facingMode = facingMode === 'user' ? 'environment' : 'user';
+  startCamera();
+});
+
+function drawVideoCover(ctx, vid, w, h, mirror){
+  const vw = vid.videoWidth, vh = vid.videoHeight;
+  if (!vw || !vh) return;
+  const scale = Math.max(w / vw, h / vh);
+  const dw = vw * scale, dh = vh * scale;
+  const dx = (w - dw) / 2, dy = (h - dh) / 2;
+  ctx.save();
+  if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(vid, mirror ? (w - dw - dx) : dx, dy, dw, dh);
+  ctx.restore();
+}
+shootBtn.addEventListener('click', () => {
+  if (inAR) return;
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  drawVideoCover(ctx, video, w, h, mirrored);
+  ctx.drawImage(canvasEl, 0, 0, w, h);
+  const dataUrl = out.toDataURL('image/png');
+  resultImg.src = dataUrl;
+  downloadBtn.href = dataUrl;
+  resultEl.classList.add('show');
+});
+retakeBtn.addEventListener('click', () => resultEl.classList.remove('show'));
+
+// ---- real WebXR AR (hit-test placement) ----
+let hitTestSource = null;
+let hitTestSourceRequested = false;
+let reticle;
+{
+  const ring = new THREE.RingGeometry(0.09, 0.11, 32).rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+  reticle = new THREE.Mesh(ring, mat);
+  reticle.matrixAutoUpdate = false;
+  reticle.visible = false;
+  scene.add(reticle);
+}
+
+async function checkARSupport(){
+  if (navigator.xr && navigator.xr.isSessionSupported){
+    try{
+      const ok = await navigator.xr.isSessionSupported('immersive-ar');
+      arBtn.disabled = !ok;
+      arBtn.textContent = ok ? 'Ver a Frida en AR' : 'AR no disponible en este equipo';
+    }catch{ arBtn.disabled = true; arBtn.textContent = 'AR no disponible en este equipo'; }
+  } else {
+    arBtn.disabled = true;
+    arBtn.textContent = 'AR no disponible en este navegador';
+  }
+}
+checkARSupport();
+
+let xrController;
+async function enterAR(){
+  let session;
+  try{
+    session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['hit-test', 'local-floor'],
+      optionalFeatures: ['dom-overlay'],
+      domOverlay: { root: document.body }
+    });
+  } catch(e){
+    alert('No se pudo iniciar la sesión de AR en este dispositivo.');
+    return;
+  }
+
+  inAR = true;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  video.style.visibility = 'hidden';
+  modeBadge.textContent = 'AR real';
+  hintText.style.display = 'none';
+  arOverlay.classList.add('show');
+  rig.visible = false;
+  reticle.visible = false;
+  hitTestSource = null;
+  hitTestSourceRequested = false;
+
+  session.addEventListener('end', onARSessionEnd);
+  await renderer.xr.setSession(session);
+
+  xrController = renderer.xr.getController(0);
+  xrController.addEventListener('select', onSelect);
+  scene.add(xrController);
+}
+
+function onSelect(){
+  if (reticle.visible){
+    rig.position.setFromMatrixPosition(reticle.matrix);
+    rig.quaternion.setFromRotationMatrix(reticle.matrix);
+    rig.scale.setScalar(1);
+    rig.visible = true;
+  }
+}
+
+function onARSessionEnd(){
+  inAR = false;
+  video.style.visibility = 'visible';
+  modeBadge.textContent = 'Modo cámara';
+  hintText.style.display = 'block';
+  arOverlay.classList.remove('show');
+  reticle.visible = false;
+  hitTestSource = null;
+  if (xrController) xrController.removeEventListener('select', onSelect);
+
+  rig.visible = true;
+  rig.position.set(currentSide * 0.55, -0.62, 0);
+  rig.quaternion.identity();
+  rig.scale.setScalar(baseScale);
+
+  onResize();
+  if (video.srcObject === null || !stream) startCamera();
+}
+
+arBtn.addEventListener('click', enterAR);
+arExitBtn.addEventListener('click', () => {
+  const session = renderer.xr.getSession();
+  if (session) session.end();
+});
+
+renderer.setAnimationLoop((timestamp, frame) => {
+  if (inAR && frame){
+    const refSpace = renderer.xr.getReferenceSpace();
+    const session = renderer.xr.getSession();
+
+    if (!hitTestSourceRequested){
+      session.requestReferenceSpace('viewer').then((viewerSpace) => {
+        session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+          hitTestSource = source;
+        });
+      });
+      hitTestSourceRequested = true;
+    }
+
+    if (hitTestSource){
+      const hits = frame.getHitTestResults(hitTestSource);
+      if (hits.length > 0 && !rig.visible){
+        const pose = hits[0].getPose(refSpace);
+        reticle.visible = true;
+        reticle.matrix.fromArray(pose.transform.matrix);
+      } else {
+        reticle.visible = false;
+      }
+    }
+  }
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
