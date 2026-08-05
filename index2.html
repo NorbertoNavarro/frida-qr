@@ -24,7 +24,8 @@
     position:absolute; inset:0; width:100%; height:100%;
     object-fit:cover; transform:scaleX(-1);
   }
-  #three-wrap{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  #three-wrap{ position:absolute; inset:0; width:100%; height:100%; touch-action:none; opacity:0; transition:opacity .6s ease; pointer-events:none; }
+  #three-wrap.visible{ opacity:1; pointer-events:auto; }
   #three-wrap canvas{ display:block; width:100%!important; height:100%!important; touch-action:none; }
 
   /* ---------- shared "paper card" chrome, echoes the passport pages ---------- */
@@ -181,9 +182,6 @@
   }
 }
 </script>
-
-<!-- Rastreo de rostro para el seguimiento tipo filtro AR -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
 
 <script type="module">
 import * as THREE from 'three';
@@ -400,7 +398,7 @@ document.getElementById('smaller').addEventListener('click', ()=>{ baseScale = c
 // tocar el chip de modo alterna entre seguimiento automático y manual
 modeChip.addEventListener('click', ()=>{
   autoFollow = !autoFollow;
-  if(autoFollow && (faceTrackingFailed || !faceMesh)){
+  if(autoFollow && (faceTrackingFailed || !faceLandmarker)){
     // el usuario quiere reintentar el seguimiento automático
     faceTrackingFailed = false;
     faceTrackingReady = false;
@@ -440,7 +438,7 @@ renderer.setAnimationLoop(()=>{
 let autoFollow = true;
 let faceTrackingReady = false;
 let faceTrackingFailed = false;
-let faceMesh = null;
+let faceLandmarker = null;
 let smoothX = fridaGroup.position.x;
 let smoothScale = 1;
 let sideOffset = 0.55; // de qué lado de tu rostro aparece Frida
@@ -455,54 +453,61 @@ function markFaceTrackingFailed(reason){
   }
 }
 
-function initFaceTracking(){
-  if(typeof FaceMesh === 'undefined'){
-    markFaceTrackingFailed('el script de MediaPipe no cargó (revisa tu conexión).');
-    return;
-  }
+async function initFaceTracking(){
   try{
-    faceMesh = new FaceMesh({
-      locateFile: (file)=> `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
-    });
-    faceMesh.setOptions({
-      maxNumFaces: 1,
-      refineLandmarks: false,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-    faceMesh.onResults(onFaceResults);
+    const { FaceLandmarker, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+    const filesetResolver = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+    );
+    const baseOptions = {
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+    };
+    let landmarker;
+    try{
+      landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { ...baseOptions, delegate: 'GPU' },
+        runningMode: 'VIDEO',
+        numFaces: 1
+      });
+    }catch(gpuErr){
+      console.warn('El delegado GPU falló, probando CPU:', gpuErr);
+      landmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+        baseOptions: { ...baseOptions, delegate: 'CPU' },
+        runningMode: 'VIDEO',
+        numFaces: 1
+      });
+    }
+    faceLandmarker = landmarker;
+    trackFaceLoop();
+    // si en 8s no se detecta ningún rostro, avisamos y pasamos a modo manual
+    // (el usuario puede reactivar el modo automático tocando el chip)
+    setTimeout(()=>{
+      if(!faceTrackingReady){
+        markFaceTrackingFailed('no se detectó ningún rostro a tiempo.');
+      }
+    }, 8000);
   }catch(err){
     markFaceTrackingFailed(err);
-    return;
   }
-  pumpFace();
-  // si en 8s no se detecta ningún rostro, avisamos y pasamos a modo manual
-  // (el usuario puede reactivar el modo automático tocando el chip)
-  setTimeout(()=>{
-    if(!faceTrackingReady){
-      markFaceTrackingFailed('no se detectó ningún rostro a tiempo.');
-    }
-  }, 8000);
 }
 
-let lastSend = 0;
-function pumpFace(){
-  requestAnimationFrame(pumpFace);
-  if(!faceMesh || video.readyState < 2 || !video.videoWidth) return;
-  const now = performance.now();
-  if(now - lastSend < 66) return; // ~15fps es suficiente para seguir el rostro
-  lastSend = now;
-  faceMesh.send({ image: video }).catch((err)=>{
+let lastVideoTime = -1;
+function trackFaceLoop(){
+  requestAnimationFrame(trackFaceLoop);
+  if(!faceLandmarker || video.readyState < 2 || !video.videoWidth) return;
+  if(video.currentTime === lastVideoTime) return; // esperar a un cuadro nuevo
+  lastVideoTime = video.currentTime;
+  try{
+    const result = faceLandmarker.detectForVideo(video, performance.now());
+    onFaceResults(result);
+  }catch(err){
     markFaceTrackingFailed(err);
-  });
+  }
 }
 
-function onFaceResults(results){
-  const faces = results.multiFaceLandmarks;
-  if(!faces || !faces.length){
-    if(!faceTrackingReady) return;
-    return;
-  }
+function onFaceResults(result){
+  const faces = result.faceLandmarks;
+  if(!faces || !faces.length) return;
   if(!faceTrackingReady){
     faceTrackingReady = true;
     if(autoFollow) updateModeChip();
@@ -550,6 +555,7 @@ async function startCamera(){
     statusEl.classList.add('hidden');
     controlsEl.classList.remove('hidden');
     modeChip.classList.remove('hidden');
+    wrap.classList.add('visible');
     updateModeChip();
     if(!modelLoaded && !modelLoadFailed){
       loadingEl.classList.remove('hidden');
