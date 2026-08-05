@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Selfie con Frida — The Chronos Experience</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
     --paper:#F6F1E4; --paper-2:#EFE8D6; --ink:#2B2118;
@@ -99,19 +99,119 @@
 
   #flash{ position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; }
 
+  /* ---------- NUEVO DISEÑO FLORAL PARA LA PANTALLA RESULTADO ---------- */
   #result{
-    position:fixed; inset:0; background:var(--paper); display:none; flex-direction:column;
-    align-items:center; justify-content:center; z-index:20; padding:24px;
+    position:fixed; inset:0; 
+    background: radial-gradient(circle at center, #FDFBF7 0%, #EAE0CE 100%);
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center; z-index:20; padding:20px;
+    overflow-y:auto;
   }
-  #result .eyebrow{ margin-bottom:14px; }
-  #result h2{ font-family:'Fraunces',serif; font-weight:500; font-size:21px; margin:0 0 16px; color:var(--ink); }
-  #result img{ max-width:100%; max-height:60vh; border-radius:12px; box-shadow:0 14px 44px rgba(43,33,24,.28); border:1px solid var(--line); }
-  #result .row{ margin-top:20px; }
+
+  .result-card {
+    position:relative;
+    background: var(--paper);
+    border: 2px solid var(--accent);
+    border-radius: 24px;
+    padding: 28px 20px 24px;
+    max-width: 480px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 20px 50px rgba(43,33,24,0.35);
+    text-align: center;
+  }
+
+  /* Adornos SVG en esquinas */
+  .flower-corner {
+    position: absolute;
+    width: 65px;
+    height: 65px;
+    pointer-events: none;
+  }
+  .flower-corner.top-left { top: -10px; left: -10px; }
+  .flower-corner.top-right { top: -10px; right: -10px; transform: scaleX(-1); }
+  .flower-svg { width: 100%; height: 100%; }
+
+  .flower-badge {
+    display: inline-block;
+    background: rgba(162, 51, 36, 0.1);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(162, 51, 36, 0.25);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .result-header h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 24px;
+    margin: 6px 0 4px;
+    color: var(--accent-ink);
+  }
+
+  .thank-text {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 13px;
+    color: var(--verde-ink);
+    margin: 0 0 16px;
+    line-height: 1.4;
+    padding: 0 10px;
+  }
+
+  .img-frame {
+    position: relative;
+    padding: 10px;
+    background: #FFF;
+    border-radius: 16px;
+    border: 1px solid rgba(43,33,24,0.15);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    width: 100%;
+    max-width: 380px;
+  }
+
+  #result img{ 
+    width: 100%;
+    max-height: 52vh; 
+    object-fit: cover;
+    border-radius: 10px; 
+    display: block;
+  }
+
+  .result-actions {
+    margin-top: 20px;
+    width: 100%;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
   #result button{
-    border:none; border-radius:999px; padding:13px 24px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer;
+    border:none; border-radius:999px; padding:14px 22px; font-family:inherit; font-weight:600; font-size:13px; cursor:pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
-  #dl{ background:var(--verde); color:var(--paper); }
-  #close-result{ background:transparent; color:var(--ink); border:1px solid var(--line)!important; }
+  #result button:active { transform: scale(0.96); }
+
+  #dl{ 
+    background: linear-gradient(135deg, var(--verde) 0%, #2A4027 100%); 
+    color: var(--paper); 
+    box-shadow: 0 4px 14px rgba(62,92,58,0.35);
+    flex: 1.2;
+  }
+  
+  #close-result{ 
+    background: transparent; 
+    color: var(--ink); 
+    border: 1px solid var(--line)!important; 
+    flex: 1;
+  }
 
   #credit{
     position:absolute; right:10px; bottom:8px; border-radius:999px; padding:5px 11px;
@@ -162,13 +262,42 @@
 
 <div id="flash"></div>
 
+<!-- INTERFAZ MEJORADA AQUI -->
 <div id="result">
-  <p class="eyebrow">Sala Frida Kahlo</p>
-  <h2>Tu recuerdo con Frida</h2>
-  <img id="result-img" alt="Selfie con Frida">
-  <div class="row">
-    <button id="close-result">Cerrar</button>
-    <button id="dl">Descargar</button>
+  <div class="result-card">
+    <div class="flower-corner top-left">
+      <svg viewBox="0 0 100 100" class="flower-svg">
+        <circle cx="20" cy="20" r="12" fill="var(--accent)" />
+        <circle cx="20" cy="20" r="4" fill="var(--mostaza)" />
+        <circle cx="42" cy="15" r="8" fill="var(--mostaza)" />
+        <circle cx="15" cy="42" r="8" fill="var(--verde)" />
+      </svg>
+    </div>
+    
+    <div class="flower-corner top-right">
+      <svg viewBox="0 0 100 100" class="flower-svg">
+        <circle cx="80" cy="20" r="12" fill="var(--accent)" />
+        <circle cx="80" cy="20" r="4" fill="var(--mostaza)" />
+        <circle cx="58" cy="15" r="8" fill="var(--mostaza)" />
+        <circle cx="85" cy="42" r="8" fill="var(--verde)" />
+      </svg>
+    </div>
+
+    <div class="result-header">
+      <span class="flower-badge">✿ Museo Frida Kahlo ✿</span>
+      <p class="eyebrow">La Casa Azul — Coyoacán</p>
+      <h2>¡Gracias por tu visita!</h2>
+      <p class="thank-text">"Pinto flores para que así no mueran." Llévate este recuerdo de tu paso por nuestra historia.</p>
+    </div>
+
+    <div class="img-frame">
+      <img id="result-img" alt="Selfie con Frida">
+    </div>
+
+    <div class="row result-actions">
+      <button id="close-result">Tomar otra foto</button>
+      <button id="dl">✿ Descargar Foto</button>
+    </div>
   </div>
 </div>
 
@@ -227,8 +356,7 @@ scene.add(rim);
 
 // ---------- cargar el modelo real ----------
 const fridaGroup = new THREE.Group();
-let userScaleMultiplier = 1; // ajuste artístico manual encima de su tamaño real
-let lateralOffset = 0.7;     // metros a los que se para junto a ti
+let baseScale = 1;
 let loadedModel = null;
 let modelLoaded = false;
 let modelLoadFailed = false;
@@ -270,7 +398,7 @@ undefined,
   loadingEl.querySelector('.paper-chip').textContent = 'No se pudo cargar el modelo 3D.';
 });
 
-fridaGroup.position.set(0.6, 0, 0.7); // de pie sobre el "piso" (y=0), a una profundidad inicial plausible
+fridaGroup.position.set(0.55, -0.85, 0);
 scene.add(fridaGroup);
 
 const shadowGeo = new THREE.CircleGeometry(0.4, 24);
@@ -385,31 +513,21 @@ function onDragMove(e){
   const dy = e.clientY - lastY;
   lastX = e.clientX; lastY = e.clientY;
   if(Math.abs(dx) > 2 || Math.abs(dy) > 2) goManual();
-  fridaGroup.position.x = clamp(fridaGroup.position.x + dx * 0.004, -2.2, 2.2);
-  fridaGroup.position.y = clamp(fridaGroup.position.y - dy * 0.003, -0.5, 0.6);
+  fridaGroup.position.x = clamp(fridaGroup.position.x + dx * 0.004, -1.6, 1.6);
+  fridaGroup.position.y = clamp(fridaGroup.position.y - dy * 0.003, -1.3, -0.2);
 }
 wrap.addEventListener('pointermove', onDragMove);
 window.addEventListener('pointermove', onDragMove);
 
-// en modo automático, ←/→ ajustan qué tan separada camina de tu lado;
-// en modo manual, mueven a Frida directamente
-document.getElementById('left').addEventListener('click', ()=>{
-  if(autoFollow){ lateralOffset = clamp(lateralOffset - 0.12, 0.3, 1.5); }
-  else { fridaGroup.position.x = clamp(fridaGroup.position.x - 0.15, -2.2, 2.2); }
-});
-document.getElementById('right').addEventListener('click', ()=>{
-  if(autoFollow){ lateralOffset = clamp(lateralOffset + 0.12, 0.3, 1.5); }
-  else { fridaGroup.position.x = clamp(fridaGroup.position.x + 0.15, -2.2, 2.2); }
-});
-// +/- son un ajuste artístico fino sobre su tamaño real, funcionan en ambos modos
-document.getElementById('bigger').addEventListener('click', ()=>{ userScaleMultiplier = clamp(userScaleMultiplier + 0.06, 0.7, 1.5); fridaGroup.scale.setScalar(userScaleMultiplier); });
-document.getElementById('smaller').addEventListener('click', ()=>{ userScaleMultiplier = clamp(userScaleMultiplier - 0.06, 0.7, 1.5); fridaGroup.scale.setScalar(userScaleMultiplier); });
+document.getElementById('left').addEventListener('click', ()=>{ goManual(); fridaGroup.position.x = clamp(fridaGroup.position.x - 0.15, -1.6, 1.6); });
+document.getElementById('right').addEventListener('click', ()=>{ goManual(); fridaGroup.position.x = clamp(fridaGroup.position.x + 0.15, -1.6, 1.6); });
+document.getElementById('bigger').addEventListener('click', ()=>{ baseScale = clamp(baseScale + 0.08, 0.4, 2.2); fridaGroup.scale.setScalar(baseScale); });
+document.getElementById('smaller').addEventListener('click', ()=>{ baseScale = clamp(baseScale - 0.08, 0.4, 2.2); fridaGroup.scale.setScalar(baseScale); });
 
 // tocar el chip de modo alterna entre seguimiento automático y manual
 modeChip.addEventListener('click', ()=>{
   autoFollow = !autoFollow;
   if(autoFollow && (faceTrackingFailed || !faceLandmarker)){
-    // el usuario quiere reintentar el seguimiento automático
     faceTrackingFailed = false;
     faceTrackingReady = false;
     initFaceTracking();
@@ -450,9 +568,8 @@ let faceTrackingReady = false;
 let faceTrackingFailed = false;
 let faceLandmarker = null;
 let smoothX = fridaGroup.position.x;
-let smoothZ = fridaGroup.position.z;
-const EYE_DISTANCE_M = 0.062; // separación promedio entre ojos de un adulto, para estimar distancia real
-const FLOOR_Y = 0;
+let smoothScale = 1;
+let sideOffset = 0.55;
 
 function markFaceTrackingFailed(reason){
   if(faceTrackingFailed) return;
@@ -490,8 +607,6 @@ async function initFaceTracking(){
     }
     faceLandmarker = landmarker;
     trackFaceLoop();
-    // si en 8s no se detecta ningún rostro, avisamos y pasamos a modo manual
-    // (el usuario puede reactivar el modo automático tocando el chip)
     setTimeout(()=>{
       if(!faceTrackingReady){
         markFaceTrackingFailed('no se detectó ningún rostro a tiempo.');
@@ -506,7 +621,7 @@ let lastVideoTime = -1;
 function trackFaceLoop(){
   requestAnimationFrame(trackFaceLoop);
   if(!faceLandmarker || video.readyState < 2 || !video.videoWidth) return;
-  if(video.currentTime === lastVideoTime) return; // esperar a un cuadro nuevo
+  if(video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
   try{
     const result = faceLandmarker.detectForVideo(video, performance.now());
@@ -523,39 +638,30 @@ function onFaceResults(result){
     faceTrackingReady = true;
     if(autoFollow) updateModeChip();
   }
-  if(!autoFollow) return;
   const lm = faces[0];
-
-  // distancia entre las esquinas externas de los ojos (índices estándar de la
-  // topología de 468 puntos), en coordenadas normalizadas del cuadro de video
-  const eyeL = lm[33], eyeR = lm[263];
-  const eyeDistNorm = Math.max(0.01, Math.hypot(eyeR.x - eyeL.x, eyeR.y - eyeL.y));
-
-  // modelo de cámara "pinhole": con el FOV de nuestra cámara 3D y el tamaño
-  // aparente de los ojos, estimamos a cuántos metros reales está tu rostro
-  const vFOV = camera3.fov * Math.PI/180;
-  const hFOV = 2*Math.atan(Math.tan(vFOV/2)*camera3.aspect);
-  const worldWidthPerDepth = 2*Math.tan(hFOV/2); // ancho de la vista (en metros) a 1m de profundidad
-  const depth = clamp(EYE_DISTANCE_M / (eyeDistNorm * worldWidthPerDepth), 0.5, 4.5);
-
-  // posición x real de tu rostro en el mundo, a esa profundidad
   const nose = lm[1];
-  const mirroredX = 1 - nose.x; // el video se ve reflejado (CSS scaleX(-1))
-  const faceWorldX = (mirroredX - 0.5) * worldWidthPerDepth * depth;
+  const mirroredX = 1 - nose.x;
 
-  // Frida se para junto a ti, del lado con más espacio en pantalla, a la
-  // misma profundidad que tu rostro — por eso aparece a tu tamaño real
-  const sideSign = mirroredX < 0.5 ? 1 : -1;
-  const targetX = clamp(faceWorldX + sideSign * lateralOffset, -2.4, 2.4);
-  const targetZ = clamp(camera3.position.z - depth, -1.6, 2.2);
+  let minX=1, maxX=0, minY=1, maxY=0;
+  for(let i=0;i<lm.length;i+=6){
+    const p = lm[i];
+    if(p.x<minX) minX=p.x; if(p.x>maxX) maxX=p.x;
+    if(p.y<minY) minY=p.y; if(p.y>maxY) maxY=p.y;
+  }
+  const faceWidth = maxX - minX;
+
+  if(!autoFollow) return;
+
+  sideOffset = mirroredX < 0.5 ? 0.55 : -0.55;
+  const targetX = clamp((mirroredX - 0.5) * 2.2 + sideOffset, -1.6, 1.6);
+  const targetScale = clamp(faceWidth / 0.16, 0.55, 1.5);
 
   smoothX = THREE.MathUtils.lerp(smoothX, targetX, 0.12);
-  smoothZ = THREE.MathUtils.lerp(smoothZ, targetZ, 0.12);
+  smoothScale = THREE.MathUtils.lerp(smoothScale, targetScale, 0.1);
 
   fridaGroup.position.x = smoothX;
-  fridaGroup.position.z = smoothZ;
-  fridaGroup.position.y = FLOOR_Y;
-  fridaGroup.scale.setScalar(userScaleMultiplier); // su altura real (1.70m) ya está en el modelo
+  baseScale = smoothScale;
+  fridaGroup.scale.setScalar(baseScale);
 }
 
 // ---------- cámara ----------
@@ -583,7 +689,7 @@ async function startCamera(){
 }
 startBtn.addEventListener('click', startCamera);
 
-// ---------- captura de foto (video + escena 3D compuestos) ----------
+// ---------- captura de foto ----------
 shutter.addEventListener('click', ()=>{
   flash.style.transition = 'none';
   flash.style.opacity = '0.85';
