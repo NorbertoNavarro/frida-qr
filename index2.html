@@ -183,7 +183,7 @@
 </script>
 
 <!-- Rastreo de rostro para el seguimiento tipo filtro AR -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/face_mesh.js" crossorigin="anonymous"></script>
 
 <script type="module">
 import * as THREE from 'three';
@@ -209,7 +209,7 @@ const camera3 = new THREE.PerspectiveCamera(42, wrap.clientWidth / wrap.clientHe
 camera3.position.set(0, 1.05, 2.6);
 camera3.lookAt(0, 0.95, 0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(wrap.clientWidth, wrap.clientHeight);
 renderer.setClearColor(0x000000, 0);
@@ -400,6 +400,12 @@ document.getElementById('smaller').addEventListener('click', ()=>{ baseScale = c
 // tocar el chip de modo alterna entre seguimiento automático y manual
 modeChip.addEventListener('click', ()=>{
   autoFollow = !autoFollow;
+  if(autoFollow && (faceTrackingFailed || !faceMesh)){
+    // el usuario quiere reintentar el seguimiento automático
+    faceTrackingFailed = false;
+    faceTrackingReady = false;
+    initFaceTracking();
+  }
   updateModeChip();
 });
 
@@ -410,7 +416,7 @@ function updateModeChip(){
     hint.textContent = 'Frida te sigue sola — toca el modo para ajustarla a mano';
   } else {
     modeChip.classList.add('manual');
-    modeLabel.textContent = 'Modo manual';
+    modeLabel.textContent = faceTrackingFailed ? 'Seguimiento no disponible' : 'Modo manual';
     hint.textContent = 'Arrastra la pantalla o usa los botones para ajustar a Frida';
   }
 }
@@ -433,37 +439,62 @@ renderer.setAnimationLoop(()=>{
 // ================= SEGUIMIENTO DE ROSTRO (filtro AR) =================
 let autoFollow = true;
 let faceTrackingReady = false;
+let faceTrackingFailed = false;
 let faceMesh = null;
 let smoothX = fridaGroup.position.x;
 let smoothScale = 1;
 let sideOffset = 0.55; // de qué lado de tu rostro aparece Frida
 
+function markFaceTrackingFailed(reason){
+  if(faceTrackingFailed) return;
+  faceTrackingFailed = true;
+  console.warn('Rastreo facial no disponible:', reason);
+  if(autoFollow){
+    autoFollow = false;
+    updateModeChip();
+  }
+}
+
 function initFaceTracking(){
   if(typeof FaceMesh === 'undefined'){
-    console.warn('FaceMesh no disponible; se usa solo el modo manual.');
+    markFaceTrackingFailed('el script de MediaPipe no cargó (revisa tu conexión).');
     return;
   }
-  faceMesh = new FaceMesh({
-    locateFile: (file)=> `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-  });
-  faceMesh.setOptions({
-    maxNumFaces: 1,
-    refineLandmarks: false,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
-  faceMesh.onResults(onFaceResults);
+  try{
+    faceMesh = new FaceMesh({
+      locateFile: (file)=> `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
+    });
+    faceMesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: false,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+    faceMesh.onResults(onFaceResults);
+  }catch(err){
+    markFaceTrackingFailed(err);
+    return;
+  }
   pumpFace();
+  // si en 8s no se detecta ningún rostro, avisamos y pasamos a modo manual
+  // (el usuario puede reactivar el modo automático tocando el chip)
+  setTimeout(()=>{
+    if(!faceTrackingReady){
+      markFaceTrackingFailed('no se detectó ningún rostro a tiempo.');
+    }
+  }, 8000);
 }
 
 let lastSend = 0;
 function pumpFace(){
   requestAnimationFrame(pumpFace);
-  if(!faceMesh || video.readyState < 2) return;
+  if(!faceMesh || video.readyState < 2 || !video.videoWidth) return;
   const now = performance.now();
   if(now - lastSend < 66) return; // ~15fps es suficiente para seguir el rostro
   lastSend = now;
-  faceMesh.send({ image: video }).catch(()=>{});
+  faceMesh.send({ image: video }).catch((err)=>{
+    markFaceTrackingFailed(err);
+  });
 }
 
 function onFaceResults(results){
