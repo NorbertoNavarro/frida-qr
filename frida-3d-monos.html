@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Autorretrato con monos en 3D — The Chronos Experience</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F1E4; --paper-2:#EFE8D6; --ink:#2B2118;
+    --accent:#3E5C3A; --accent-ink:#233420;
+    --line: rgba(43,33,24,0.16);
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; }
+  .page{ max-width:560px; margin:0 auto; padding:28px 0 64px; }
+  .head{ padding:0 24px; }
+  .eyebrow{ font-size:12px; letter-spacing:.12em; text-transform:uppercase; opacity:.6; margin:0 0 14px; border-left:3px solid var(--accent); padding-left:10px; }
+  .yr{ font-size:13px; letter-spacing:.08em; text-transform:uppercase; opacity:.55; margin-bottom:4px; }
+  h1{ font-family:'Fraunces',serif; font-weight:500; font-size:26px; line-height:1.2; margin:0 0 14px; }
+
+  #canvas-wrap{
+    position:relative;
+    width:100%; height:56vh; min-height:340px;
+    background: radial-gradient(120% 140% at 50% 20%, #FBF8EF 0%, var(--paper-2) 70%);
+    border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    touch-action:none;
+  }
+  #canvas-wrap canvas{ display:block; width:100%; height:100%; }
+  .hint{
+    position:absolute; left:0; right:0; bottom:10px; text-align:center;
+    font-size:11px; opacity:.5; pointer-events:none;
+  }
+
+  .body{ padding:22px 24px 0; }
+  .desc{ font-size:14px; line-height:1.7; opacity:.85; margin:0 0 18px; }
+  .note{ font-size:11px; opacity:.55; line-height:1.6; border-top:1px solid var(--line); padding-top:14px; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="head">
+    <p class="eyebrow">The Chronos Experience · Sala Frida Kahlo</p>
+    <div class="yr">1943 · en 3D</div>
+    <h1>Autorretrato con monos</h1>
+  </div>
+
+  <div id="canvas-wrap">
+    <p class="hint">Arrastra para girar · pellizca para acercar</p>
+  </div>
+
+  <div class="body">
+    <p class="desc">Esta es una reinterpretación en 3D del cuadro, con Fulang-Chang y Caimito de Guayabal —los monos araña favoritos de Frida— y la vegetación exuberante que la rodea. Gíralo con el dedo para verlo desde todos los ángulos.</p>
+    <p class="note">El botón "ENTER AR" (si aparece debajo del cuadro) coloca la escena frente a tu cámara en tiempo real. Funciona en Android con Chrome; en iPhone o navegadores sin soporte AR solo verás el visor 3D giratorio, que funciona en cualquier equipo.</p>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+const wrap = document.getElementById('canvas-wrap');
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, wrap.clientWidth / wrap.clientHeight, 0.01, 20);
+camera.position.set(0, 1.15, 2.6);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+renderer.xr.enabled = true;
+wrap.appendChild(renderer.domElement);
+
+// lights
+scene.add(new THREE.AmbientLight(0xfff2df, 0.9));
+const key = new THREE.DirectionalLight(0xffffff, 1.1);
+key.position.set(1.5, 3, 2);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xdfeaff, 0.4);
+fill.position.set(-2, 1, -1);
+scene.add(fill);
+
+// ---- build the diorama ----
+function leafShape(len, w){
+  const s = new THREE.Shape();
+  s.moveTo(0,0);
+  s.quadraticCurveTo(w, len*0.35, 0, len);
+  s.quadraticCurveTo(-w, len*0.35, 0, 0);
+  return s;
+}
+function makeLeaf(len, w, color){
+  const geo = new THREE.ExtrudeGeometry(leafShape(len, w), { depth: 0.015, bevelEnabled: false });
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, side: THREE.DoubleSide });
+  return new THREE.Mesh(geo, mat);
+}
+function makeMonkey(color){
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+  body.scale.set(1, 1.3, 0.9);
+  g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 16), new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+  head.position.set(0, 0.14, 0.02);
+  g.add(head);
+  [[-0.06,0.18],[0.06,0.18]].forEach(([x,y])=>{
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+    ear.position.set(x, y, 0.02);
+    g.add(ear);
+  });
+  const tailCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0,-0.05,-0.08),
+    new THREE.Vector3(0.05,0.05,-0.16),
+    new THREE.Vector3(0.02,0.16,-0.14)
+  ]);
+  const tail = new THREE.Mesh(new THREE.TubeGeometry(tailCurve, 20, 0.015, 8, false), new THREE.MeshStandardMaterial({ color, roughness: 0.8 }));
+  g.add(tail);
+  return g;
+}
+
+const diorama = new THREE.Group();
+
+// frame (shadow-box)
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x2B2118, roughness: 0.5 });
+const frameGeo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+const frameW = 1.15, frameH = 1.5, bar = 0.05;
+[[0, frameH/2, 0, frameW, bar, bar],[0, -frameH/2, 0, frameW, bar, bar],
+ [-frameW/2, 0, 0, bar, frameH, bar],[frameW/2, 0, 0, bar, frameH, bar]].forEach(([x,y,z,w,h,d])=>{
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), frameMat);
+  m.position.set(x, y + 0.75, z + 0.05);
+  diorama.add(m);
+});
+
+// foliage backdrop
+const leafColors = [0x3E5C3A, 0x4C7248, 0x2E4A2C];
+for(let i=0;i<9;i++){
+  const leaf = makeLeaf(0.5 + Math.random()*0.35, 0.16 + Math.random()*0.08, leafColors[i % leafColors.length]);
+  leaf.position.set((Math.random()-0.5)*0.95, 0.35 + Math.random()*0.9, -0.28 - Math.random()*0.18);
+  leaf.rotation.z = (Math.random()-0.5) * 1.4;
+  leaf.rotation.y = (Math.random()-0.5) * 0.6;
+  diorama.add(leaf);
+}
+
+// bust
+const skin = new THREE.MeshStandardMaterial({ color: 0xE8C39E, roughness: 0.6 });
+const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.34, 0.55, 20), new THREE.MeshStandardMaterial({ color: 0xF4F1E6, roughness: 0.7 }));
+torso.position.set(0, 0.48, 0);
+diorama.add(torso);
+
+const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.12, 16), skin);
+neck.position.set(0, 0.8, 0);
+diorama.add(neck);
+
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.175, 24, 24), skin);
+head.position.set(0, 1.0, 0);
+diorama.add(head);
+
+const hair = new THREE.Mesh(
+  new THREE.SphereGeometry(0.185, 24, 24, 0, Math.PI*2, 0, Math.PI*0.62),
+  new THREE.MeshStandardMaterial({ color: 0x1E140D, roughness: 0.55 })
+);
+hair.position.set(0, 1.02, 0);
+diorama.add(hair);
+
+// flower crown
+const flowerColors = [0xD99A2B, 0xA23324, 0xE07B39];
+for(let i=0;i<10;i++){
+  const a = (i / 10) * Math.PI * 2;
+  const petal = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 10), new THREE.MeshStandardMaterial({ color: flowerColors[i % flowerColors.length], roughness: 0.6 }));
+  petal.position.set(Math.cos(a)*0.17, 1.16 + Math.sin(a*3)*0.015, Math.sin(a)*0.17);
+  diorama.add(petal);
+}
+
+// monkeys
+const m1 = makeMonkey(0x3B2A1E);
+m1.position.set(-0.34, 0.72, 0.12);
+m1.rotation.y = 0.5;
+diorama.add(m1);
+
+const m2 = makeMonkey(0x4A3324);
+m2.position.set(0.34, 0.75, 0.12);
+m2.rotation.y = -0.5;
+diorama.add(m2);
+
+diorama.position.set(0, -0.55, 0);
+scene.add(diorama);
+
+// ---- baseline orbit controls ----
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.55, 0);
+controls.enableDamping = true;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.1;
+controls.minDistance = 1.4;
+controls.maxDistance = 4.5;
+controls.update();
+
+// ---- AR button (Android / Chrome with WebXR) ----
+const arButton = ARButton.createButton(renderer, { requiredFeatures: [] });
+document.body.appendChild(arButton);
+
+renderer.xr.addEventListener('sessionstart', () => {
+  controls.enabled = false;
+  diorama.scale.setScalar(0.22);
+  diorama.position.set(0, -0.05, -0.6);
+});
+renderer.xr.addEventListener('sessionend', () => {
+  controls.enabled = true;
+  diorama.scale.setScalar(1);
+  diorama.position.set(0, -0.55, 0);
+});
+
+function onResize(){
+  camera.aspect = wrap.clientWidth / wrap.clientHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+}
+window.addEventListener('resize', onResize);
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
