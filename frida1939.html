@@ -12,6 +12,7 @@
     --accent:#1E5A82; --accent-ink:#12384F;
     --verde:#3E5C3A; --verde-ink:#233420;
     --rojo:#A23324; --rojo-ink:#5A1B12;
+    --mostaza:#D99A2B; --mostaza-ink:#7A5312;
     --line: rgba(43,33,24,0.16);
   }
   *{box-sizing:border-box;}
@@ -35,6 +36,9 @@
   .stamp .in b{ font-family:'Fraunces',serif; font-size:13px; text-transform:none; letter-spacing:0; }
   .result-title{ font-family:'Fraunces',serif; font-size:18px; margin:0 0 4px; }
   .result-sub{ font-size:13px; opacity:.7; margin:0 0 14px; }
+  .final-reward{ margin-top:16px; padding:14px 16px; background:var(--mostaza); color:var(--mostaza-ink); border-radius:12px; text-align:left; }
+  .final-reward .ft{ font-family:'Fraunces',serif; font-size:15px; margin:0 0 4px; }
+  .final-reward p{ font-size:12px; line-height:1.5; margin:0; }
   button.btn.ghost{ font-family:'Inter',sans-serif; font-size:13px; font-weight:600; padding:11px 16px; border-radius:10px; background:transparent; color:var(--ink); border:1px solid var(--line); cursor:pointer; }
 </style>
 </head>
@@ -98,10 +102,18 @@ function pick(i, el){
       saveProgress(stamps, points);
     }
     renderProgress();
+    const after = getProgress();
+    const rewardHTML = after.stamps.length === TOTAL_STOPS ? `
+      <div class="final-reward">
+        <p class="ft">¡Pasaporte completo!</p>
+        <p>Completaste los tres retos. Recompensa desbloqueada: 50% de descuento en tu próxima visita o un café gratis en la cafetería del museo.</p>
+      </div>
+    ` : '';
     fb.innerHTML = `
       <div class="stamp"><div class="in"><b>1939</b>${BADGE}</div></div>
       <p class="result-title">¡Correcto! +50 puntos</p>
-      <p class="result-sub">Sello "${BADGE}" desbloqueado. Llevas ${getProgress().points} puntos acumulados en tu pasaporte del tiempo.</p>
+      <p class="result-sub">Sello "${BADGE}" desbloqueado. Llevas ${after.points} puntos acumulados en tu pasaporte del tiempo.</p>
+      ${rewardHTML}
     `;
   } else {
     el.classList.add('wrong');
